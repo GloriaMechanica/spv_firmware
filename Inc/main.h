@@ -80,6 +80,8 @@ void Error_Handler(void);
 #define RMII_RXD0_GPIO_Port GPIOC
 #define RMII_RXD1_Pin GPIO_PIN_5
 #define RMII_RXD1_GPIO_Port GPIOC
+#define ENA_DAE_Pin GPIO_PIN_7
+#define ENA_DAE_GPIO_Port GPIOE
 #define X_DAE_DIR_Pin GPIO_PIN_8
 #define X_DAE_DIR_GPIO_Port GPIOE
 #define X_DAE_STEP_Pin GPIO_PIN_9

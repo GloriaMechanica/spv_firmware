@@ -114,7 +114,8 @@ int main(void)
   while (1)
   {
 
-	  HAL_Delay(100);
+	  // Do some hello-world typical stuff
+	  HAL_Delay(200);
 	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 	  print_hello_world();
 
@@ -390,7 +391,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(NOTE_LATCH_GPIO_Port, NOTE_LATCH_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, X_DAE_DIR_Pin|Y_DAE_DIR_Pin|Z_DAE_DIR_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, ENA_DAE_Pin|X_DAE_DIR_Pin|Y_DAE_DIR_Pin|Z_DAE_DIR_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
@@ -427,19 +428,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(NOTE_LATCH_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : ENA_DAE_Pin Z_DAE_DIR_Pin */
+  GPIO_InitStruct.Pin = ENA_DAE_Pin|Z_DAE_DIR_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
   /*Configure GPIO pins : X_DAE_DIR_Pin Y_DAE_DIR_Pin */
   GPIO_InitStruct.Pin = X_DAE_DIR_Pin|Y_DAE_DIR_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : Z_DAE_DIR_Pin */
-  GPIO_InitStruct.Pin = Z_DAE_DIR_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(Z_DAE_DIR_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : RMII_TXD1_Pin */
   GPIO_InitStruct.Pin = RMII_TXD1_Pin;
