@@ -126,7 +126,7 @@ int main(void)
   {
 
 	  // Do some hello-world typical stuff
-	  HAL_Delay(150);
+	  HAL_Delay(500);
 	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 	  print_hello_world();
 
