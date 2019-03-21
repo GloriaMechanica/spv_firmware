@@ -37,8 +37,8 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include <stdio.h>
-#include "debug_uart.h"
 #include "usb_cdc_comm.h"
+#include "debug_tools.h"
 
 /* USER CODE END Includes */
 
@@ -124,6 +124,8 @@ int main(void)
    * Put all sorts of user inits here
    */
   USB_CDC_Init();
+  HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0x0001);
 
   /* USER CODE END 2 */
 
@@ -132,13 +134,10 @@ int main(void)
   while (1)
   {
 
-	  // Do some hello-world typical stuff
-	  HAL_Delay(500);
-	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-
 	  char buf[30];
 	  sprintf(buf, "USB CDC Ping!\n");
 
+	  HAL_Delay(500);
 
 	  USB_CDC_TransmitBuffer((uint8_t*)buf, strlen(buf));
 

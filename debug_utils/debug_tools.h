@@ -9,4 +9,4 @@
 void print_hello_world (void);
 void dbgprintbuf(uint8_t *buf, uint32_t len);
 void dbgprintf(const char *fmt, ...);
-
+void toggle_debug_led (void);

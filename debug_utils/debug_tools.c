@@ -12,11 +12,11 @@
  */
 
 #include "main.h"
-#include "debug_uart.h"
 #include "string.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include "device_handles.h"
+#include "debug_tools.h"
 
 // PRIVATE DEFINES
 #define 	DEBUG_UART_HANDLE			&huart3		// Handle of the uart to be used as debug uart
@@ -76,3 +76,20 @@ void print_hello_world (void)
 	  sprintf(buf,"Hello World says SPV!\n");
 	  HAL_UART_Transmit(DEBUG_UART_HANDLE, (uint8_t*)buf, strlen(buf), DEBUG_UART_TX_TIMEOUT);
 }
+
+/** @brief toggles blue led on NUCLEO board
+ *
+ *  @param (none)
+ *  @return (none)
+ */
+void toggle_debug_led (void)
+{
+	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+}
+
+
+
+
+
+
+

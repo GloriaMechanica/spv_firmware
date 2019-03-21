@@ -8,11 +8,13 @@
 	@date March 20th, 2019
  */
 
-#include <settings.h>
+
+#include "settings.h"
 #include "main.h"
-#include "debug_uart.h"
 #include "usb_cdc_comm.h"
 #include "usbd_cdc_if.h"
+#include "debug_tools.h"
+
 
 // Struct for accessing the usb rx-buffer
 typedef struct
@@ -75,8 +77,8 @@ void USB_CDC_addDataToRxBuffer(uint8_t* buffer, uint32_t length)
 	memcpy(&usb_cdc_rx_buffer.data[usb_cdc_rx_buffer.top], buffer, length);
 	usb_cdc_rx_buffer.top += length;
 
-	dbgprintf("Buffer status:");
-	dbgprintbuf(usb_cdc_rx_buffer.data, usb_cdc_rx_buffer.top);
+	//dbgprintf("Buffer status:");
+	//dbgprintbuf(usb_cdc_rx_buffer.data, usb_cdc_rx_buffer.top);
 }
 
 /** @brief Clears the receive buffer
