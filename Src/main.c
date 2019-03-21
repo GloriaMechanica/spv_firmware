@@ -120,6 +120,11 @@ int main(void)
   MX_GFXSIMULATOR_Init();
   /* USER CODE BEGIN 2 */
 
+  /*
+   * Put all sorts of user inits here
+   */
+  USB_CDC_Init();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -132,7 +137,7 @@ int main(void)
 	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 
 	  char buf[30];
-	  sprintf(buf, "USB CDC transmit works!\n");
+	  sprintf(buf, "USB CDC Ping!\n");
 
 
 	  USB_CDC_TransmitBuffer((uint8_t*)buf, strlen(buf));

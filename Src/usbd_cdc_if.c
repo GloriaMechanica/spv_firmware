@@ -23,7 +23,7 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
-#include "debug_uart.h"
+#include "usb_cdc_comm.h"
 
 /* USER CODE END INCLUDE */
 
@@ -264,16 +264,17 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
+  USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
+  USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+
 	/*
 	 * Note by jheel: This fx is called, when some new bytes came in through OUT
 	 * endpoint of USB device. By the following two functions, this data of length
 	 * *Len is read out and put in Buf[]. From there on, something can be done
 	 * with it. The maximum *Len is 64 because thats the size of the endpoint.
 	 */
-  USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
-  USBD_CDC_ReceivePacket(&hUsbDeviceFS);
-
   // Put recieved bytes in our own buffer.
+  USB_CDC_addDataToRxBuffer(Buf, *Len);
 
   return (USBD_OK);
   /* USER CODE END 6 */

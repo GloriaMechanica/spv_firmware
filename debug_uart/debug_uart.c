@@ -48,7 +48,7 @@ void dbgprintf(const char *fmt, ...)
 }
 
 /** @brief Prints out some bytes of a buffer directly on
- * 			the debug uart, without doing anything to them
+ * 			the debug uart, inside a little frame
  *
  *  @param buf - buffer of data bytes
  *  @param len - number of bytes to be read out of buffer
@@ -56,7 +56,9 @@ void dbgprintf(const char *fmt, ...)
  */
 void dbgprintbuf(uint8_t *buf, uint32_t len)
 {
+	dbgprintf("--- BEGIN DATA ---");
 	HAL_UART_Transmit(DEBUG_UART_HANDLE, buf, len, DEBUG_UART_TX_TIMEOUT);
+	dbgprintf("\n--- END DATA ---");
 }
 
 /** @brief Prints character ch at the current location
