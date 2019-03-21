@@ -11,16 +11,53 @@
 	@date March 19th, 2019
  */
 
-
-
 #include "main.h"
 #include "debug_uart.h"
 #include "string.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include "device_handles.h"
 
+// PRIVATE DEFINES
+#define 	DEBUG_UART_HANDLE			&huart3		// Handle of the uart to be used as debug uart
+#define 	DEBUG_UART_TX_BUFFER_SIZE	256  		// string of dbgprintf must not be longer than that
+#define		DEBUG_UART_TX_TIMEOUT		1000 		// [ms]. Pretty useless, but driver needs that
 
 
+
+/** @brief prints out a standard printf-type format char over debug uart
+ * 			and adds a \n, because you always foget that...
+ * 			However, be careful, it only takes up to DEBUG_UART_TX_BUFFER_SIZE
+ * 			characters, otherwise it returns and does nothing!
+ *
+ *  @param fmt - format string of printf-type
+ *  @return (none)
+ */
+void dbgprintf(const char *fmt, ...)
+{
+	char buf[DEBUG_UART_TX_BUFFER_SIZE];
+
+	// Get additional arguments and pass over to sprintf
+	va_list arg_ptr;
+	va_start(arg_ptr, fmt);
+	vsprintf(buf, fmt, arg_ptr);
+	va_end(arg_ptr);
+	strcat(buf, "\n");
+
+	HAL_UART_Transmit(DEBUG_UART_HANDLE, (uint8_t*) buf, strlen(buf), DEBUG_UART_TX_TIMEOUT);
+}
+
+/** @brief Prints out some bytes of a buffer directly on
+ * 			the debug uart, without doing anything to them
+ *
+ *  @param buf - buffer of data bytes
+ *  @param len - number of bytes to be read out of buffer
+ *  @return (none)
+ */
+void dbgprintbuf(uint8_t *buf, uint32_t len)
+{
+	HAL_UART_Transmit(DEBUG_UART_HANDLE, buf, len, DEBUG_UART_TX_TIMEOUT);
+}
 
 /** @brief Prints character ch at the current location
  *         of the cursor.
@@ -35,5 +72,5 @@ void print_hello_world (void)
 {
 	  char buf[30];
 	  sprintf(buf,"Hello World says SPV!\n");
-	  HAL_UART_Transmit(&huart3, (uint8_t*)buf, strlen(buf),1000);
+	  HAL_UART_Transmit(DEBUG_UART_HANDLE, (uint8_t*)buf, strlen(buf), DEBUG_UART_TX_TIMEOUT);
 }

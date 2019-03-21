@@ -36,7 +36,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <string.h>
+#include <stdio.h>
 #include "debug_uart.h"
+#include "usb_cdc_comm.h"
 
 /* USER CODE END Includes */
 
@@ -128,7 +130,12 @@ int main(void)
 	  // Do some hello-world typical stuff
 	  HAL_Delay(500);
 	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-	  print_hello_world();
+
+	  char buf[30];
+	  sprintf(buf, "USB CDC transmit works!\n");
+
+
+	  USB_CDC_TransmitBuffer((uint8_t*)buf, strlen(buf));
 
     /* USER CODE END WHILE */
 

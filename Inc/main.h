@@ -132,6 +132,9 @@ void Error_Handler(void);
 #define LD2_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
+#define SUCCESS		0
+#define ERROR		-1
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

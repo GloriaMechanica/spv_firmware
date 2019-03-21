@@ -48,7 +48,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/spv_firmware/debug_uart}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/spv_firmware/magnet_outputs}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/spv_firmware/stepper_driver}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/spv_firmware/usb_communication}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/spv_firmware/usb_cdc_comm}&quot;"/>
 								</option>
 								<option id="com.atollic.truestudio.gcc.symbols.defined.1670122205" name="Defined symbols" superClass="com.atollic.truestudio.gcc.symbols.defined" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__weak=&quot;__attribute__((weak))&quot;"/>
@@ -137,6 +137,7 @@
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Src"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="debug_uart"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="startup"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="usb_cdc_comm"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
