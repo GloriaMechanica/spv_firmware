@@ -5,5 +5,7 @@
 	@date March 26th, 2019
  */
 
+void slow_down (void);
+void speed_up (void);
 void tim1_cc_irq_handler (void);
 

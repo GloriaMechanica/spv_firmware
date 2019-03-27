@@ -12,12 +12,54 @@
 #include "interrupt_handler.h"
 
 uint8_t output_state;
-uint32_t step_duration;
+int32_t ticks_per_step;
+double f_ticks_per_step;
+double f_ticks_per_step_new;
+int32_t n;
+uint8_t updown;
+
 
 #define STEP_PULSE_WIDTH				1		// Witdh of step pulse in Timer-ticks (10us)
+#define C_START							10000
+#define C_END							20
 
 
 
+void speed_up (void)
+{
+	updown = 1;
+	f_ticks_per_step = 1200;
+	n = 0;
+}
+
+void slow_down (void)
+{
+	updown = 0;
+	n = -1200;
+}
+
+void recalculate_preload(void)
+{
+
+	if (f_ticks_per_step >= C_START && updown == 0)
+	{
+		// we are almost standing still
+		f_ticks_per_step = C_START;
+	}
+	else if (f_ticks_per_step <= C_END && updown == 1)
+	{
+		// we are running full speed
+		//ticks_per_step = C_END;
+	}
+	else
+	{
+		n++;
+		f_ticks_per_step_new = f_ticks_per_step - (2*f_ticks_per_step)/(4*(double)n+1);
+	}
+	f_ticks_per_step = f_ticks_per_step_new;
+	ticks_per_step = (uint16_t)f_ticks_per_step_new;
+
+}
 
 void tim1_cc_irq_handler (void)
 {
@@ -42,7 +84,8 @@ void tim1_cc_irq_handler (void)
 	    	}
 	    	else
 	    	{
-	    		count +=50000;
+	    		recalculate_preload();
+	    		count += ticks_per_step;
 	    		output_state = 0;
 	    		htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
 	    		htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
