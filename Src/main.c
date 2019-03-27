@@ -124,8 +124,9 @@ int main(void)
    * Put all sorts of user inits here
    */
   USB_CDC_Init();
+
   HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0x0001);
+  //TIM1->CCER |= TIM_CCER_CC1E;
 
   /* USER CODE END 2 */
 
@@ -138,6 +139,7 @@ int main(void)
 	  sprintf(buf, "USB CDC Ping!\n");
 
 	  HAL_Delay(500);
+	 // toggle_debug_led();
 
 	  USB_CDC_TransmitBuffer((uint8_t*)buf, strlen(buf));
 
@@ -291,7 +293,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 960;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 0;
+  htim1.Init.Period = 65535;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -315,7 +317,7 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sConfigOC.OCMode = TIM_OCMODE_ACTIVE;
+  sConfigOC.OCMode = TIM_OCMODE_TOGGLE;
   sConfigOC.Pulse = 1;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;

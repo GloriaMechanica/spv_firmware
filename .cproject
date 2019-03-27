@@ -137,6 +137,7 @@
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Src"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="debug_utils"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="startup"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="stepper_driver"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="usb_cdc_comm"/>
 					</sourceEntries>
 				</configuration>
