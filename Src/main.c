@@ -140,9 +140,9 @@ int main(void)
 	  sprintf(buf, "USB CDC Ping!\n");
 
 	  speed_up();
-	  HAL_Delay(600);
+	  HAL_Delay(25);
 	  slow_down();
-	  HAL_Delay(600);
+	  HAL_Delay(25);
 	  HAL_GPIO_TogglePin(Z_DAE_DIR_GPIO_Port, Z_DAE_DIR_Pin);
 
 	 // toggle_debug_led();
@@ -297,7 +297,7 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 300;
+  htim1.Init.Prescaler = 384;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim1.Init.Period = 65535;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;

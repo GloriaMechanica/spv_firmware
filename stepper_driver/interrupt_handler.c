@@ -12,53 +12,79 @@
 #include "interrupt_handler.h"
 
 uint8_t output_state;
+uint8_t pulse_generation;
 int32_t ticks_per_step;
-double f_ticks_per_step;
-double f_ticks_per_step_new;
+int32_t f_ticks_per_step;
 int32_t n;
-uint8_t updown;
+uint8_t mode;
+
+#define ACC				0
+#define RUN				1
+#define DEC				2
+#define STOP			3
 
 
-#define STEP_PULSE_WIDTH				1		// Witdh of step pulse in Timer-ticks (10us)
-#define C_START							10000
-#define C_END							20
 
+#define STEP_PULSE_WIDTH				10		// Witdh of step pulse in Timer-ticks (10us)
+#define FIX_POINT_OFFSET				2048
+#define C_START							500 * FIX_POINT_OFFSET
+#define C_END							20 * FIX_POINT_OFFSET
 
+void kick_timer(void);
 
 void speed_up (void)
 {
-	updown = 1;
-	f_ticks_per_step = 1200;
-	n = 0;
+
+	mode = ACC;
+	f_ticks_per_step = 400 * FIX_POINT_OFFSET;
+	n = 1;
+	pulse_generation = 1;
+	kick_timer();
 }
 
 void slow_down (void)
 {
-	updown = 0;
-	n = -1200;
+	mode = DEC;
+	n = -400 ;
+	kick_timer();
 }
 
 void recalculate_preload(void)
 {
+	if (mode == ACC)
+	{
 
-	if (f_ticks_per_step >= C_START && updown == 0)
-	{
-		// we are almost standing still
-		f_ticks_per_step = C_START;
-	}
-	else if (f_ticks_per_step <= C_END && updown == 1)
-	{
-		// we are running full speed
-		//ticks_per_step = C_END;
-	}
-	else
-	{
+		f_ticks_per_step = f_ticks_per_step - (2*f_ticks_per_step)/(4*n+1);
 		n++;
-		f_ticks_per_step_new = f_ticks_per_step - (2*f_ticks_per_step)/(4*(double)n+1);
-	}
-	f_ticks_per_step = f_ticks_per_step_new;
-	ticks_per_step = (uint16_t)f_ticks_per_step_new;
 
+		if (f_ticks_per_step <= C_END)
+			mode = RUN;
+	}
+	else if (mode == RUN)
+	{
+		// Do nothing and just run along
+	}
+	else if (mode == DEC)
+	{
+		f_ticks_per_step = f_ticks_per_step - (2*f_ticks_per_step)/(4*n+1);
+		n++;
+
+		if (n > 0 || f_ticks_per_step > C_START)
+			mode = STOP;
+	}
+	else if (mode == STOP)
+	{
+		pulse_generation = 0;
+	}
+
+	ticks_per_step = (uint16_t)(f_ticks_per_step/FIX_POINT_OFFSET);
+
+}
+void kick_timer(void)
+{
+	uint16_t count = __HAL_TIM_GET_COUNTER(&htim1);
+	count ++;
+	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, count);
 }
 
 void tim1_cc_irq_handler (void)
@@ -71,28 +97,40 @@ void tim1_cc_irq_handler (void)
 	    	//dbgprintf("TIM1 CC1 interrupt!");
 
 	    	uint16_t count;
-	    	count = __HAL_TIM_GET_COUNTER(&htim1);
+			recalculate_preload();
+			count = __HAL_TIM_GET_COUNTER(&htim1);
 
-	    	if (output_state == 0)
+	    	if (pulse_generation)
 	    	{
-	    		count += STEP_PULSE_WIDTH;
-	    		output_state = 1; // Generate a pulse
-	    		htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
-	    		htim1.Instance->CCMR1 |= TIM_OCMODE_INACTIVE;
+	    		if (output_state == 0 && pulse_generation)
+				{
+					count += STEP_PULSE_WIDTH;
+					output_state = 1; // Generate a pulse
+					htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
+					htim1.Instance->CCMR1 |= TIM_OCMODE_INACTIVE;
 
+
+				}
+				else if (output_state == 1 && pulse_generation)
+				{
+
+					count += ticks_per_step - STEP_PULSE_WIDTH;
+					output_state = 0;
+					htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
+					htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
+				}
 
 	    	}
 	    	else
 	    	{
-	    		recalculate_preload();
-	    		count += ticks_per_step;
-	    		output_state = 0;
+	    		// Switch off output, so that it does not randomly tick along
 	    		htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
-	    		htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
+	    		htim1.Instance->CCMR1 |= TIM_OCMODE_FORCED_INACTIVE;
+	    		output_state = 1;
 	    	}
 
+	    		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, count);
 
-	    	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, count);
 	    }
 	  }
 
