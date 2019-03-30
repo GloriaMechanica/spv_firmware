@@ -11,6 +11,12 @@
 #include "debug_tools.h"
 #include "interrupt_handler.h"
 
+// Is used in ISR. Contains the current CNT-register state of timer1
+uint16_t tim1_cnt;
+
+// DAE - Z - Axis
+
+
 uint8_t output_state;
 uint8_t pulse_generation;
 int32_t ticks_per_step;
@@ -28,9 +34,14 @@ uint8_t mode;
 #define STEP_PULSE_WIDTH				10		// Witdh of step pulse in Timer-ticks (10us)
 #define FIX_POINT_OFFSET				2048
 #define C_START							500 * FIX_POINT_OFFSET
-#define C_END							20 * FIX_POINT_OFFSET
+#define C_END							100 * FIX_POINT_OFFSET
+
+
+
 
 void kick_timer(void);
+
+
 
 void speed_up (void)
 {
@@ -68,8 +79,8 @@ void recalculate_preload(void)
 	{
 		f_ticks_per_step = f_ticks_per_step - (2*f_ticks_per_step)/(4*n+1);
 		n++;
-
 		if (n > 0 || f_ticks_per_step > C_START)
+
 			mode = STOP;
 	}
 	else if (mode == STOP)
@@ -89,22 +100,25 @@ void kick_timer(void)
 
 void tim1_cc_irq_handler (void)
 {
+	tim1_cnt = __HAL_TIM_GET_COUNTER(&htim1);
+
 	// Check if the interrupt was created by CC1
 	  if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC1) != RESET)
 	  {
 	    if (__HAL_TIM_GET_IT_SOURCE(&htim1, TIM_IT_CC1) != RESET)
 	    {
 	    	//dbgprintf("TIM1 CC1 interrupt!");
+	        __HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC1);
+	        htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_1;
 
-	    	uint16_t count;
 			recalculate_preload();
-			count = __HAL_TIM_GET_COUNTER(&htim1);
+
 
 	    	if (pulse_generation)
 	    	{
 	    		if (output_state == 0 && pulse_generation)
 				{
-					count += STEP_PULSE_WIDTH;
+	    			tim1_cnt += STEP_PULSE_WIDTH;
 					output_state = 1; // Generate a pulse
 					htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
 					htim1.Instance->CCMR1 |= TIM_OCMODE_INACTIVE;
@@ -114,7 +128,7 @@ void tim1_cc_irq_handler (void)
 				else if (output_state == 1 && pulse_generation)
 				{
 
-					count += ticks_per_step - STEP_PULSE_WIDTH;
+					tim1_cnt += ticks_per_step - STEP_PULSE_WIDTH;
 					output_state = 0;
 					htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
 					htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
@@ -129,9 +143,32 @@ void tim1_cc_irq_handler (void)
 	    		output_state = 1;
 	    	}
 
-	    		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, count);
+	    		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, tim1_cnt);
 
 	    }
 	  }
 
+	  // Check if the interrupt was created by CC2
+	  if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC2) != RESET)
+	  {
+		  if (__HAL_TIM_GET_IT_SOURCE(&htim1, TIM_IT_CC2) != RESET)
+		  {
+		        __HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC2);
+		        htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_2;
+
+		  }
+	  }
+
+	  // Check if the interrupt was created by CC3
+	  if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC3) != RESET)
+	  {
+		  if (__HAL_TIM_GET_IT_SOURCE(&htim1, TIM_IT_CC3) != RESET)
+		  {
+		        __HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC3);
+		        htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_3;
+
+		  }
+	  }
 }
+
+

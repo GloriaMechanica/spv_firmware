@@ -19,12 +19,12 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
+#include <step_generation.h>
 #include "main.h"
 #include "stm32f7xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "debug_tools.h"
-#include "interrupt_handler.h"
 /* USER CODE END Includes */
   
 /* Private typedef -----------------------------------------------------------*/
@@ -207,10 +207,15 @@ void TIM1_CC_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM1_CC_IRQn 0 */
   tim1_cc_irq_handler(); // Custom interrupt handler for Timer 1
+
+  // We cut the HAL interrupt handler out because it does nothig sensible and takes way too long.
+#if (0)
   /* USER CODE END TIM1_CC_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);
   /* USER CODE BEGIN TIM1_CC_IRQn 1 */
+#endif
   toggle_debug_led();
+
   /* USER CODE END TIM1_CC_IRQn 1 */
 }
 

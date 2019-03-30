@@ -87,6 +87,15 @@ void toggle_debug_led (void)
 	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 }
 
+void cpu_load_pin_on (void)
+{
+    CPU_LOAD_GPIO_Port->BSRR = CPU_LOAD_Pin;
+}
+
+void cpu_load_pin_off (void)
+{
+    CPU_LOAD_GPIO_Port->BSRR = (uint32_t)CPU_LOAD_Pin << 16;
+}
 
 
 
