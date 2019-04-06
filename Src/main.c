@@ -39,7 +39,7 @@
 #include <stdio.h>
 #include "usb_cdc_comm.h"
 #include "debug_tools.h"
-#include "interrupt_handler.h"
+#include "step_generation.h"
 #include <math.h>
 
 /* USER CODE END Includes */
@@ -127,6 +127,9 @@ int main(void)
    */
   USB_CDC_Init();
 
+  float f;
+  double d;
+
   HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
 
   /* USER CODE END 2 */
@@ -142,9 +145,9 @@ int main(void)
 	  //speed_up();
 	  //HAL_Delay(100);
 	  //slow_down();
-	  HAL_Delay(100);
+	  HAL_Delay(500);
 	  //HAL_GPIO_TogglePin(Z_DAE_DIR_GPIO_Port, Z_DAE_DIR_Pin);
-
+	  dbgprintf("Float %d Double: %d", sizeof(f), sizeof(d));
 	 // toggle_debug_led();
 
 	  USB_CDC_TransmitBuffer((uint8_t*)buf, strlen(buf));

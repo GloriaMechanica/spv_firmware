@@ -4,43 +4,64 @@
  *  @author Josef Heel
 	@date March 26th, 2019
  */
-
+#include "main.h"
 // A sort of fixed-point arithmetic is used
-#define FACTOR		1024
+#define FACTOR			1024
+#define PI				(3.141592654F)
+#define N_APPROX		4 					// Number of Interations used to find optimum passover speed
+#define CORR			4056				// Internally devided by 1000, so it should really mean 0.4056
 
-#define PI			3.141592654F;
 
-// Timers intervals (can be calculated somehow, but define for now)
-#define TIM1_TICKS_PER_SEC		250000 // runs at 250kHz
+// Timer setup
+#define TIM1_TPS		250000				// TODO: calculate from project settings later
+#define C_MAX			65535				// Biggest possible timer preload in one cycle
 
-typedef enum
-{
-	ACCEL,
-	RUN,
-	DECEL,
-	STOP
-} E_STEPPER_MODE;
-
+// Contains motor parameters which are not dependent on the current cycle
 typedef struct
 {
 	// General motor data
-	int32_t pos; 				// Contains absolute motor position relativ to end switch (in steps).
-
-	// ISR const dw/dt algorithm stuff
-	E_STEPPER_MODE mode; 	// The current state of the stepper engine
-	uint8_t compare_out; 	// Toggle flag to generate output pulses
-	int32_t c_F; 			// Contains the time between two steps (in timer-ticks x FACTOR)
-	int32_t c_new_F; 		// new calculated time between two steps (in timer-ticks x FACTOR)
-	int32_t n; 				// counter used to time acceleration and deceleration
-
-	// Other motor parameters used to calculate acceleration etc.
-	float alpha; 			// angle which the motor moves when generating one step pulse
-	float w_start; 			// speed
-	float dw_accel; 		// acceleration [rad/sec^2]
-	float dw_decel; 		// deceleration [rad/sec^2] is also positive, because its interpreted as deceleration
-
-
+	int32_t 	pos; 			// Absolute motor position, relative to end stop [in steps]
+	float		acc; 			// Maximum allowed acceleration/deceleration [rad^2/sec]
+	float 		w_max; 			// maximal allowed motor speed [rad/sec]
+	float 		alpha; 			// Rotor angle per step [rad]
+	int32_t		c_err; 			// Difference in actual and relative timer ticks (for correction)
 } T_STEPPER_STATE;
+
+// Contains information for ISR Setup of one cycle
+typedef struct
+{	int32_t		c;				// ISR Timer preload (contains FACTOR!) [in timer ticks * FACTOR]
+	int32_t 	c_hw; 			// Hardware timer preload. This value is actually put in the timer. [in timer ticks]
+	int32_t 	c_0; 			// Timer preload for cold start  [in timer ticks]
+	int32_t 	c_t; 			// Target speed preload value [in timer ticks]
+	int32_t		c_ideal; 		// Theoretical number of timer ticks in this cycle
+	int32_t		c_real; 		// Actual number of timer ticks this cycle took. Used to keep track of timing error accumulation.
+	int32_t		s; 				// Relative amount of steps to do in this cycle
+	int32_t 	s_on; 			// relative step position when on-phase is completed
+	int32_t 	s_off; 			// relative step position when off-phase starts
+	int32_t		n; 				// acceleration index (corresponds to the number of steps needed to get to this speed from 0)
+	int32_t		neq_on; 		// acceleration index preload at the start of cycle
+	int32_t 	neq_off; 		// acceleration index preload at the end of cycle
+	int32_t		shutoff; 		// When set to 1, the motor does not move at all and it does not automatically start the next cycle
+	int32_t		no_accel;		// When set to 1, the motor does not accelerate at all and just moves at target speed
+	int32_t 	out_state; 		// For pulse generation. See ISR.
+	int32_t 	dir_abs; 		// Direction. 1 means forward, -1 means backwards. DO NOT PUT 0 in here!
+	int32_t 	d_on; 			// direction of acceleration at the beginning of cycle. 1 means faster, -1 means slower
+	int32_t		d_off; 			// direction of acceleration at the end of cycle. 1 means faster, -1 means slower
+} T_ISR_CONTROL;
+
+typedef struct
+{
+	T_ISR_CONTROL* active;
+	T_ISR_CONTROL* waiting;
+}T_ISR_CONTROL_SWAP;
+
+// Global stepper state variables
+T_ISR_CONTROL stepper_shutoff;
+
+T_STEPPER_STATE	z_dae_state;
+T_ISR_CONTROL z_dae_control[2];
+T_ISR_CONTROL_SWAP z_dae_swap;
+
 
 void slow_down (void);
 void speed_up (void);
