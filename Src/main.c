@@ -40,6 +40,7 @@
 #include "usb_cdc_comm.h"
 #include "debug_tools.h"
 #include "step_generation.h"
+#include "motor_control.h"
 #include <math.h>
 
 /* USER CODE END Includes */
@@ -127,10 +128,7 @@ int main(void)
    */
   USB_CDC_Init();
 
-  float f;
-  double d;
-
-  HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
+  SM_Init();
 
   /* USER CODE END 2 */
 
@@ -138,19 +136,11 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  SM_updateMotorControl();
+	  HAL_Delay(1);
 
-	  char buf[30];
-	  sprintf(buf, "USB CDC Ping!\n");
 
-	  //speed_up();
-	  //HAL_Delay(100);
-	  //slow_down();
-	  HAL_Delay(500);
-	  //HAL_GPIO_TogglePin(Z_DAE_DIR_GPIO_Port, Z_DAE_DIR_Pin);
-	  dbgprintf("Float %d Double: %d", sizeof(f), sizeof(d));
-	 // toggle_debug_led();
 
-	  USB_CDC_TransmitBuffer((uint8_t*)buf, strlen(buf));
 
     /* USER CODE END WHILE */
 

@@ -206,15 +206,16 @@ void SysTick_Handler(void)
 void TIM1_CC_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM1_CC_IRQn 0 */
+  cpu_load_pin_on();
   tim1_cc_irq_handler(); // Custom interrupt handler for Timer 1
 
-  // We cut the HAL interrupt handler out because it does nothig sensible and takes way too long.
+  // We cut the HAL interrupt handler out because it does nothing sensible and takes way too long.
 #if (0)
   /* USER CODE END TIM1_CC_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);
   /* USER CODE BEGIN TIM1_CC_IRQn 1 */
 #endif
-  toggle_debug_led();
+  cpu_load_pin_off();
 
   /* USER CODE END TIM1_CC_IRQn 1 */
 }

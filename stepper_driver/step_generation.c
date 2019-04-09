@@ -1,10 +1,15 @@
 /** @file step_generation.c
  *  @brief Contains the low level stepper motor stuff (recalculation of timer-preloads, ISR control swapping etc.)
  *  		The functions here run automatically and take their data from the stepper control swap.
- *  		The swap needs to be checked and updated by other routines.
+ *  		The swap needs to be checked and updated by other routines
  *
  *  @author Josef Heel
 	@date March 26th, 2019
+
+	@usage
+		o	Call STG_Init first, otherwise some stuff is uninitialized
+		o	Use motor_control.h functions to put new cycle settings in the timer ISR control struct
+		o	Use STG_StartCycle to push the timer to immediately start
  */
 
 #include "main.h"
@@ -23,17 +28,12 @@ uint16_t tim1_preload;
 
 
 uint8_t z_dae_output_state;
-uint8_t pulse_generation;
 int32_t ticks_per_step;
 int32_t f_ticks_per_step;
 int32_t n;
 uint8_t mode;
 
-
-#define STEP_PULSE_WIDTH				10		// Witdh of step pulse in Timer-ticks (10us)
-#define FIX_POINT_OFFSET				2048
-#define C_START							500 * FIX_POINT_OFFSET
-#define C_END							100 * FIX_POINT_OFFSET
+#define STEP_PULSE_WIDTH 	10
 
 // PROTOTYPES
 uint16_t step_calculations(T_ISR_CONTROL *ctl);
@@ -46,24 +46,6 @@ void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state);
  */
 void STG_Init (void)
 {
-
-	// Sets up stepper_shutoff ISR control struct. If this struct
-	// is passed to the ISR, it will not do anything but wait forever.
-	stepper_shutoff.c = C_MAX * FACTOR;
-	stepper_shutoff.c_hw = C_MAX;
-	stepper_shutoff.c_0 = C_MAX;
-	stepper_shutoff.c_t = C_MAX;
-	stepper_shutoff.c_ideal = C_MAX;
-	stepper_shutoff.c_real = C_MAX;
-	stepper_shutoff.n = 0;
-	stepper_shutoff.neq_on = 0;
-	stepper_shutoff.neq_off = 0;
-	stepper_shutoff.s = 0;
-	stepper_shutoff.s_on = 0;
-	stepper_shutoff.s_off = 0;
-	stepper_shutoff.shutoff = 1; // <- thats the important one
-	stepper_shutoff.no_accel = 1;
-
 	// Init the individual motors
 	// Z Axis on DAE strings
 	z_dae_state.pos = 0;
@@ -71,30 +53,80 @@ void STG_Init (void)
 	z_dae_state.w_max = Z_DAE_SPEED_MAX;
 	z_dae_state.alpha = 2 * PI / (Z_DAE_STEPS_PER_REV * Z_DAE_STEP_MODE);
 
-	// ISRs need to be shut off here.
+	// Initialize isr control swap stuff
+	z_dae_swap.active = &stepper_shutoff;
+	z_dae_swap.waiting = &(z_dae_swap.z_dae_control[0]);
+	z_dae_swap.available = 0;
+
+	// Start timers
+	HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
 }
 
-/** @brief 	Exchanges active and passive ISR control structure. The active one is the one currently
- * 			executed by the ISR, while the waiting one is set up for the next cycle.
+/** @brief 	Usually, the timer swaps its control struct by itself. But if it is the first command or
+ * 			a stop cycle was executed, it has to be started again precisely. Therefore it is necessary
+ * 			to generate a timer interrupt without (!) generating an output pulse. This is done by this function.
+ * 			This function can also be called when a cycle is already in progress and should be restarted for some
+ * 			reason. But be careful, it may perform an instant change in speed and therefore loose steps!
+ *
+ *  @param [in/out] *ctl - 	swap structure with both control structures
+ *  @return (none)
+ */
+void STG_StartCycle(T_ISR_CONTROL_SWAP *ctl)
+{
+	uint16_t tim_preload;
+
+	// Z-DAE Axis
+	if(ctl == &z_dae_swap)
+	{
+		// First mute the output (The ISR activates it again by itself immediately)
+		htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
+		htim1.Instance->CCMR1 |= TIM_OCMODE_FORCED_INACTIVE;
+
+		// Initialize out_state so that it first waits the calculated time and does not generate an interrupt after pulsewidth
+		ctl->active->out_state = 0;
+
+		// in case the cycle was already running, we reset it (should ususally not be necessary)
+		ctl->active->s = 0;
+		ctl->active->running = 1;
+
+		// And finally offset the timer by 1, so that it starts at the next tick (which is statistically 0.5 intervals away).
+		tim_preload = __HAL_TIM_GET_COUNTER(&htim1) + 1;
+		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, tim_preload);
+	}
+}
+
+
+/** @brief 	Makes the waiting ISR control struct active and puts the other of the two
+ * 			control structs in waiting. Whatever was in "active" before is thrown away.
+ * 			(if e.g. stepper_shutoff was put here). It also sets shutoff to 0, which
+ * 			is always set to 1 in a fre
  *
  *  @param (none)
  *  @return (none)
  */
-void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * isr_control)
+void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * ctl)
 {
-	T_ISR_CONTROL * temp;
-	if (isr_control->available == 1)
+	if (ctl->available == 1)
 	{
-		temp = isr_control->active;
-		isr_control->active = isr_control->waiting;
-		isr_control->waiting = temp;
-		isr_control->available = 0;	// Mark that the now waiting one does not contain valid information.
+		ctl->active = ctl->waiting;
+		if (ctl->active == &(ctl->z_dae_control[0]))
+		{
+			ctl->waiting = &(ctl->z_dae_control[1]);
+			  toggle_debug_led();
+		}
+		else
+		{
+			ctl->waiting = &(ctl->z_dae_control[0]);
+		}
+
+		ctl->active->running = 1;
+		ctl->available = 0;	// Mark that the now waiting one does not contain valid information.
 	}
 	else
 	{
 		// for some reason the waiting control sturct has not been updated. As we cannot do anything
 		// sensible now, we stop the motor immediately (for now).
-		isr_control->active = &stepper_shutoff;
+		ctl->active = &stepper_shutoff;
 	}
 }
 
@@ -104,7 +136,7 @@ void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * isr_control)
  *
  *  @param [in/out] *ctl - 	control structure containing all the low level ISR setup paramters (c, n, s...)
  *  						some of those parameters are modified by this routine (n, c
- *  @return timer preload x FACTOR.
+ *  @return timer preload (without FACTOR).
  */
 uint16_t step_calculations(T_ISR_CONTROL *ctl)
 {
@@ -172,10 +204,13 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl)
 		ctl->c = ctl->c_t;
 	}
 
-	// count the used up time to determine error
-	ctl->c_real += ctl->c;
+	// set and return real hardware_count
+	ctl->c_hw = ctl->c / FACTOR;
 
-	return ctl->c;
+	// count the used up time to determine error
+	ctl->c_real += ctl->c_hw;
+
+	return ctl->c_hw;
 
 }
 
@@ -197,15 +232,6 @@ void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state)
 	}
 }
 
-/* Not needed anymore
-void kick_timer(void)
-{
-	uint16_t count = __HAL_TIM_GET_COUNTER(&htim1);
-	count ++;
-	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, count);
-}
-*/
-
 void tim1_cc_irq_handler (void)
 {
 	// We make a local pointer for copy and paste purposes of the other axis.
@@ -225,11 +251,11 @@ void tim1_cc_irq_handler (void)
 	    	__HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC1);
 	    	htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_1;
 
+	    	// CCINT1 is used for Z_DAE_axis, so we switch the control and state structs to it
 	    	ctl = &z_dae_swap;
 	    	state = &z_dae_state;
 
-	    	// Pulse generation is done here for name reasons
-	    	if (pulse_generation)
+	    	if (ctl->active->running == 1 && ctl->active->shutoff == 0)
 	    	{
 	    		if (ctl->active->out_state == 1)
 	    		{
@@ -259,8 +285,8 @@ void tim1_cc_irq_handler (void)
 	    			// Take care of direction pin.
 	    			switch(ctl->active->dir_abs * Z_DAE_FLIP_DIR)
 	    			{
-	    			case  1: HAL_GPIO_WritePin(Z_DAE_DIR_GPIO_Port, Z_DAE_DIR_Pin, GPIO_PIN_SET);
-	    			case -1: HAL_GPIO_WritePin(Z_DAE_DIR_GPIO_Port, Z_DAE_DIR_Pin, GPIO_PIN_RESET);
+	    			case  1: HAL_GPIO_WritePin(Z_DAE_DIR_GPIO_Port, Z_DAE_DIR_Pin, GPIO_PIN_SET); break;
+	    			case -1: HAL_GPIO_WritePin(Z_DAE_DIR_GPIO_Port, Z_DAE_DIR_Pin, GPIO_PIN_RESET); break;
 	    			}
 	    		}
 
@@ -273,7 +299,6 @@ void tim1_cc_irq_handler (void)
 	    		// Force off output, so that it does not randomly tick along
 	    		htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
 	    		htim1.Instance->CCMR1 |= TIM_OCMODE_FORCED_INACTIVE;
-	    		ctl->active->out_state = 1;
 	    	}
 	    }
 	  }
