@@ -35,7 +35,8 @@ typedef struct
 	int32_t 	c_t; 			// Target speed preload value [in timer ticks]
 	int32_t		c_ideal; 		// Theoretical number of timer ticks in this cycle
 	int32_t		c_real; 		// Actual number of timer ticks this cycle took. Used to keep track of timing error accumulation.
-	int32_t		s; 				// Relative amount of steps to do in this cycle
+	int32_t		s; 				// Current relative step position in this cycle
+	int32_t 	s_total; 		// Relative amount of steps to do in this cycle
 	int32_t 	s_on; 			// relative step position when on-phase is completed
 	int32_t 	s_off; 			// relative step position when off-phase starts
 	int32_t		n; 				// acceleration index (corresponds to the number of steps needed to get to this speed from 0)
@@ -51,8 +52,9 @@ typedef struct
 
 typedef struct
 {
-	T_ISR_CONTROL* active;
-	T_ISR_CONTROL* waiting;
+	T_ISR_CONTROL* 	active;
+	T_ISR_CONTROL* 	waiting;
+	int32_t			available; 	// Gets set to 1 if the waiting control struct has been updated and is ready to use in the next cycle
 }T_ISR_CONTROL_SWAP;
 
 // Global stepper state variables
@@ -62,8 +64,11 @@ T_STEPPER_STATE	z_dae_state;
 T_ISR_CONTROL z_dae_control[2];
 T_ISR_CONTROL_SWAP z_dae_swap;
 
-
-void slow_down (void);
-void speed_up (void);
+// PROTOTYPES
 void tim1_cc_irq_handler (void);
+void STG_Init (void);
+void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * isr_control);
+
+
+
 
