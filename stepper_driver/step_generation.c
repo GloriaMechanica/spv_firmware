@@ -47,19 +47,29 @@ void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state);
 void STG_Init (void)
 {
 	// Init the individual motors
-	// Z Axis on DAE strings
-	z_dae_state.pos = 0;
-	z_dae_state.acc = Z_DAE_ACCEL_MAX;
-	z_dae_state.w_max = Z_DAE_SPEED_MAX;
-	z_dae_state.alpha = 2 * PI / (Z_DAE_STEPS_PER_REV * Z_DAE_STEP_MODE);
-
-	// Initialize isr control swap stuff
-	z_dae_swap.active = &stepper_shutoff;
-	z_dae_swap.waiting = &(z_dae_swap.z_dae_control[0]);
-	z_dae_swap.available = 0;
+	z_dae_init(&z_dae_state, &z_dae_swap);
 
 	// Start timers
 	HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
+}
+
+/** @brief 	Initialisation of motor state and swap buffer for Z-DAE-Axis
+ *
+ *  @param (none)
+ *  @return (none)
+ */
+void z_dae_init(T_STEPPER_STATE* stat, T_ISR_CONTROL_SWAP swap)
+{
+	// Z Axis on DAE strings
+	stat->pos = 0;
+	stat->acc = Z_DAE_ACCEL_MAX;
+	stat->w_max = Z_DAE_SPEED_MAX;
+	stat->alpha = 2 * PI / (Z_DAE_STEPS_PER_REV * Z_DAE_STEP_MODE);
+
+	// Initialize isr control swap stuff
+	swap->active = &stepper_shutoff;
+	swap->waiting = &(z_dae_swap.z_dae_control[0]);
+	swap->available = 0;
 }
 
 /** @brief 	Usually, the timer swaps its control struct by itself. But if it is the first command or
@@ -130,6 +140,8 @@ void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * ctl)
 	}
 }
 
+
+
 /** @brief This function calculates the new timer preload value according to the current ISR-
  * 			(and hence motor-) state. It must not be called when the step number s_total is exceeded.
  * 			This is made sure in the timer ISR.
@@ -144,24 +156,28 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl)
 	if (ctl->s == 0)
 	{
 		ctl->n = ctl->neq_on;
+	}
+	if (ctl->s == s_off)
+	{
+		ctl->n = ctl->neq_off;
+	}
+
+	if (ctl->s <= ctl->s_on)
+	{
 		if (ctl->n == 0)
 		{	// If neq is 0, there can be two reasons for that:
-			n = n + 1;
 			if (ctl->no_accel == 1)
 			{	// Const slow speed -> no acceleration is done in the whole cycle
-				ctl->c = ctl->c_t;
+				c_temp = ctl->c_t;
 			}
 			else
 			{	// Or we just started from 0, so we need initial counter preload
-				ctl->c = ctl->c_0;
+				c_temp = ctl->c_0;
 			}
 		}
-	}
-	if (ctl->s <= ctl->s_on && ctl->n != 0)
-	{
-		if (ctl->n == 1)
+		else if (ctl->n == 1)
 		{ 	// First step acceleration correction
-			c_temp = ctl->c * CORR;
+			c_temp = ctl->c * CORR1;
 			c_temp /= 1000;
 		}
 
@@ -171,25 +187,29 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl)
 		}
 
 		// Overshoot protection
-		if ((c_temp - ctl->c)*(ctl->d_on) > 0)
+		if ((c_temp - ctl->c_t)*(ctl->d_on) >= 0)
 		{
 			ctl->c = c_temp;
 			ctl->n++;
 		}
 	}
-	else if (ctl->s == ctl->s_off)
+	else if (ctl->s > ctl->s_off)
 	{
-		ctl->n = ctl->neq_off;
 		if (ctl->n == 0)
 		{
-			ctl->c = ctl->c_0;
+			if (ctl->no_accel == 1)
+			{
+				ctl->c = ctl->c_t;
+			}
+			else
+			{
+				ctl->c = ctl->c_0;
+			}
+
 		}
-	}
-	else if (ctl->s > ctl->s_off && n != 0)
-	{
-		if (ctl->n == 1)
+		else if (ctl->n == 1)
 		{ 	// First step acceleration correction
-			ctl->c = ctl->c * CORR;
+			ctl->c = ctl->c * CORR1;
 			ctl->c /= 1000; // CORR Factor is x1000 to avoid rounding errors, so we need to divide afterwards.
 		}
 		else

@@ -8,8 +8,8 @@
 // A sort of fixed-point arithmetic is used
 #define FACTOR			1000
 #define PI				(3.141592654F)
-#define N_APPROX		4 					// Number of Interations used to find optimum passover speed
-#define CORR			4056				// Internally devided by 1000, so it should really mean 0.4056
+#define CORR0			6760				// Internally devided by 1000, so it should really mean 0.676
+#define CORR1			6100
 
 
 // Timer setup
