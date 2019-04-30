@@ -6,8 +6,9 @@
  */
 
 #define N_APPROX		4 					// Number of Interations used to find optimum passover speed
-
-typedef float real;
+#define R_ERR			1e-6 				// For zero detection on floats
+#define S_EXTRA			2					// acceleration is allowed to be S_EXTRA steps longer (overshoot protection catches it normally) to avoid big speed jumps if accel is a little to small
+#define W_ERR			100.0F				// To indicate something is wrong.
 
 typedef struct
 {

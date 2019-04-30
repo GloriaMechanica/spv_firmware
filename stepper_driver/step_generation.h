@@ -10,10 +10,10 @@
 #define PI				(3.141592654F)
 #define CORR0			6760				// Internally devided by 1000, so it should really mean 0.676
 #define CORR1			6100
-
+#define C_TABLE_SIZE	1200				// Size of acceleration table. That is the maximum number of accelerating steps starting at zero speed.
 
 // Timer setup
-#define TIM1_TPS		250000				// TODO: calculate from project settings later
+#define F_TIMER			250000				// TODO: Calculate from project settings later.
 #define C_MAX			65535				// Biggest possible timer preload in one cycle
 
 // Contains motor parameters which are not dependent on the current cycle
@@ -49,6 +49,7 @@ typedef struct
 	int32_t 	dir_abs; 		// Direction. 1 means forward, -1 means backwards. DO NOT PUT 0 in here!
 	int32_t 	d_on; 			// direction of acceleration at the beginning of cycle. 1 means faster, -1 means slower
 	int32_t		d_off; 			// direction of acceleration at the end of cycle. 1 means faster, -1 means slower
+	int32_t		*c_table; 		// Acceleration table. This pointer points to the right table somewhere in the ram to be used with this motor.
 } T_ISR_CONTROL;
 
 typedef struct
@@ -61,7 +62,7 @@ typedef struct
 
 // Global stepper state variables
 T_ISR_CONTROL stepper_shutoff;
-T_STEPPER_STATE	z_dae_state;
+T_STEPPER_STATE	z_dae_motor;
 T_ISR_CONTROL_SWAP z_dae_swap;
 
 // PROTOTYPES

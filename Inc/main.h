@@ -137,6 +137,9 @@ void Error_Handler(void);
 #define SUCCESS		0
 #define ERROR		-1
 
+// To quickly change from float to double
+typedef double real;
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

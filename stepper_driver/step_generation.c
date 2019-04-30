@@ -18,26 +18,27 @@
 #include "debug_tools.h"
 #include "step_generation.h"
 #include "motor_parameters.h"
+#include <math.h>
 
 // Is used in ISR. Contains the current CNT-register state of timer1
-uint16_t tim1_cnt;
-uint16_t tim1_c_hw;
-uint16_t tim1_preload;
+uint16_t 	tim1_cnt;
+uint16_t 	tim1_c_hw;
+uint16_t 	tim1_preload;
+int32_t 	c_table_z[C_TABLE_SIZE]; 		// Contains timer preload values for each acceleration index n for both z-axis
+int32_t 	c_table_xy[C_TABLE_SIZE]; 		// contains timer preload values for each acceleration index n for all x and y axis
 
 // DAE - Z - Axis
-
-
 uint8_t z_dae_output_state;
-int32_t ticks_per_step;
-int32_t f_ticks_per_step;
-int32_t n;
-uint8_t mode;
 
 #define STEP_PULSE_WIDTH 	10
 
 // PROTOTYPES
 uint16_t step_calculations(T_ISR_CONTROL *ctl);
+void z_dae_init(T_STEPPER_STATE* stat, T_ISR_CONTROL_SWAP *swap);
 void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state);
+void accel_table_init(int32_t *array, uint32_t length, double acceleration, double alpha);
+
+// FUNCTIONS
 
 /** @brief 	Inits the step generation algorithm
  *
@@ -47,10 +48,38 @@ void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state);
 void STG_Init (void)
 {
 	// Init the individual motors
-	z_dae_init(&z_dae_state, &z_dae_swap);
+	z_dae_init(&z_dae_motor, &z_dae_swap);
+
+	// Calculate acceleration table which is held in RAM for making the ISR as short as possible
+	accel_table_init(c_table_z, C_TABLE_SIZE, Z_ACCEL_MAX, Z_ALPHA);
 
 	// Start timers
 	HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
+}
+
+/** @brief 	Initializes a acceleration ramp table according to the desired acceleration, timer parameters and so on.
+ *
+ *  @param array - pointer to array for all preload values. Has to be of of lengh "length"
+ *  @param length - length of acceleration array.
+ *  @param acceleration - well, just that ... [rad/sec^2]
+ *  @param alpha - angle which the rotor moves when making one step pulse [rad/step]
+ *
+ *  @return (none)
+ */
+void accel_table_init(int32_t *array, uint32_t length, real acceleration, real alpha)
+{
+	int32_t c_0;
+	uint32_t i;
+
+	// Calculate start preload
+	c_0 = F_TIMER * sqrt(2*alpha/acceleration) * CORR0; // * FACTOR / FACTOR, because CORR0 contains it already.
+
+	array[0] = c_0;
+	for (i = 0; i < length; i++)
+	{
+		// Const acceleration calculation according to D. Austin
+		array[i + 1] = array[i] - 2 * array[i] / (4*i + 1);
+	}
 }
 
 /** @brief 	Initialisation of motor state and swap buffer for Z-DAE-Axis
@@ -58,13 +87,13 @@ void STG_Init (void)
  *  @param (none)
  *  @return (none)
  */
-void z_dae_init(T_STEPPER_STATE* stat, T_ISR_CONTROL_SWAP swap)
+void z_dae_init(T_STEPPER_STATE* stat, T_ISR_CONTROL_SWAP *swap)
 {
 	// Z Axis on DAE strings
 	stat->pos = 0;
-	stat->acc = Z_DAE_ACCEL_MAX;
-	stat->w_max = Z_DAE_SPEED_MAX;
-	stat->alpha = 2 * PI / (Z_DAE_STEPS_PER_REV * Z_DAE_STEP_MODE);
+	stat->acc = Z_ACCEL_MAX;
+	stat->w_max = Z_SPEED_MAX;
+	stat->alpha = Z_ALPHA;
 
 	// Initialize isr control swap stuff
 	swap->active = &stepper_shutoff;
@@ -146,81 +175,73 @@ void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * ctl)
  * 			(and hence motor-) state. It must not be called when the step number s_total is exceeded.
  * 			This is made sure in the timer ISR.
  *
+ * 			Simple table-based constant acceleration algorithm implemeted. No jerk-limitation yet.
+ *
  *  @param [in/out] *ctl - 	control structure containing all the low level ISR setup paramters (c, n, s...)
- *  						some of those parameters are modified by this routine (n, c
+ *  						some of those parameters are modified by this routine (e.g. n, c)
  *  @return timer preload (without FACTOR).
  */
 uint16_t step_calculations(T_ISR_CONTROL *ctl)
 {
 	uint16_t c_temp;
-	if (ctl->s == 0)
+	if (ctl->s < ctl->s_on)
 	{
-		ctl->n = ctl->neq_on;
-	}
-	if (ctl->s == s_off)
-	{
-		ctl->n = ctl->neq_off;
-	}
-
-	if (ctl->s <= ctl->s_on)
-	{
-		if (ctl->n == 0)
-		{	// If neq is 0, there can be two reasons for that:
-			if (ctl->no_accel == 1)
-			{	// Const slow speed -> no acceleration is done in the whole cycle
-				c_temp = ctl->c_t;
-			}
-			else
-			{	// Or we just started from 0, so we need initial counter preload
-				c_temp = ctl->c_0;
-			}
-		}
-		else if (ctl->n == 1)
-		{ 	// First step acceleration correction
-			c_temp = ctl->c * CORR1;
-			c_temp /= 1000;
+		if (ctl->s == 0)
+		{
+			ctl->n = ctl->neq_on;
 		}
 
+		if (ctl->no_accel == 1)
+		{
+			c_temp = ctl->c_t;
+		}
 		else
-		{	// Normal acceleration calculation according to D. Austin
-			c_temp = ctl->c - 2*(ctl->c)/(4*(ctl->n) + 1);
+		{
+			c_temp = ctl->c_table[ctl->n];
 		}
+
+		ctl->n++;
 
 		// Overshoot protection
-		if ((c_temp - ctl->c_t)*(ctl->d_on) >= 0)
+		if ((c_temp - ctl->c_t)*ctl->d_on >= 0)
 		{
 			ctl->c = c_temp;
-			ctl->n++;
-		}
-	}
-	else if (ctl->s > ctl->s_off)
-	{
-		if (ctl->n == 0)
-		{
-			if (ctl->no_accel == 1)
-			{
-				ctl->c = ctl->c_t;
-			}
-			else
-			{
-				ctl->c = ctl->c_0;
-			}
-
-		}
-		else if (ctl->n == 1)
-		{ 	// First step acceleration correction
-			ctl->c = ctl->c * CORR1;
-			ctl->c /= 1000; // CORR Factor is x1000 to avoid rounding errors, so we need to divide afterwards.
 		}
 		else
-		{	// Normal acceleration calculation according to D. Austin
-			ctl->c = ctl->c - 2*(ctl->c)/(4*(ctl->n) + 1);
+		{
+			// Count overshoot here for debug purposes
 		}
+	}
+	else if (ctl->s >= ctl->s_off)
+	{
+		if (ctl->s == ctl->s_off)
+		{
+			ctl->n = ctl->neq_off;
+		}
+
+		if (ctl->no_accel == 1)
+		{
+			c_temp = ctl->c_t;
+		}
+		else
+		{
+			c_temp = ctl->c_table[ctl->n];
+		}
+
 		ctl->n++;
+
+		if ((ctl->c_t - c_temp)*ctl->d_off >= 0)
+		{
+			ctl->c = c_temp;
+		}
+		else
+		{
+			// Count overshoot here for debug purposes
+		}
 	}
 	else
 	{
-		// We already reached target speed, so we just go with constant target speed.
+		// If neighter accel nor decel, just run along at target speed.
 		ctl->c = ctl->c_t;
 	}
 
@@ -273,7 +294,7 @@ void tim1_cc_irq_handler (void)
 
 	    	// CCINT1 is used for Z_DAE_axis, so we switch the control and state structs to it
 	    	ctl = &z_dae_swap;
-	    	state = &z_dae_state;
+	    	state = &z_dae_motor;
 
 	    	if (ctl->active->running == 1 && ctl->active->shutoff == 0)
 	    	{
