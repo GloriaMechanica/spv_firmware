@@ -12,7 +12,13 @@
 #include "motor_control.h"
 #include <math.h>
 
-static int32_t toggledir;
+// Debug-only stuff
+int32_t test_positions[TEST_POINTS] = {0, 1000, 2000, 1500, 1510, 0, 0};
+int32_t test_times[TEST_POINTS] = 	  {0, 400, 650, 900, 1200, 1300, 1400 };
+real w_old;
+
+int32_t cycle_number;
+
 
 // PROTOTYPES
 real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR_CONTROL_SWAP *ctl);
@@ -45,42 +51,48 @@ void SM_Init (void)
 
 	// Step generation setup (activates timers etc.)
 	STG_Init();
+}
 
-	toggledir = 1;
+void SM_restart_testcylce (void)
+{
+	// Just for debug
+	cycle_number = 0;
+	w_old = 0;
 
 	// Just for test purposes kick it off
 	SM_updateMotorControl();
 	STG_swapISRcontrol(&z_dae_swap);
 	STG_StartCycle(&z_dae_swap);
-}
 
+}
 
 
 /** @brief  Needs to be called periodically by the main program. (ideally less than 1ms rhythm)
  *  @param 	(none)
  *  @return (none)
  */
-void SM_updateMotorControl(void)
+int32_t SM_updateMotorControl(void)
 {
-	if (z_dae_swap.available == 0)
+	if (z_dae_swap.available == 0 && cycle_number < TEST_POINTS - 2)
 	{
 		T_SPT_SETUP setup;
-		setup.delta_s0 = 1200; // steps
-		setup.delta_t0 = 400; // ms
-		setup.delta_s1 = 300;
-		setup.delta_t1 = 400;
-		calculate_motor_control(&setup, &z_dae_motor ,  &z_dae_swap);
+		setup.delta_s0 = test_positions[cycle_number + 1] - test_positions[cycle_number]; // steps
+		setup.delta_t0 = test_times[cycle_number + 1] - test_times[cycle_number]; // ms
+		setup.delta_s1 = test_positions[cycle_number + 2] - test_positions[cycle_number + 1];
+		setup.delta_t1 = test_times[cycle_number + 2] - test_times[cycle_number + 1];
+		setup.w_s = w_old;
+		dbgprintf("Z Motor calculations: ");
+		w_old = calculate_motor_control(&setup, &z_dae_motor ,  &z_dae_swap);
 		// Mark that new values have been put in place.
 		z_dae_swap.available = 1;
+		cycle_number++;
 	}
+	return cycle_number;
 }
 
 /** @brief 	If the stepper ISR is done with one cycle and switched to the waiting one, this function has
  * 			to calculate the next waiting one.
  *
- * 			It so far only accepts positive steps.
- *
- * 			What to do if delta_s0 = 0 ? -> shutdown mode
  *
  * 			chatch t=0 exceptions
  *
@@ -104,8 +116,9 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 	real 	delta_theta1;
 	int32_t delta_s0 = setup->delta_s0;
 	int32_t delta_s1 = setup->delta_s1;
-	real	delta_t0 = (real) setup->delta_t0 / 1000;
+	real	delta_t0 = (real) setup->delta_t0 / 1000; // milliseconds to seconds
 	real	delta_t1 = (real) setup->delta_t1 / 1000;
+	int32_t dir_abs;
 
 	// Angular speeds
 	real 	w_mean0;			// Mean speed of this cycle
@@ -145,21 +158,54 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 
 	// ------------ start calculations ------------------------------------
 	dbgprintf(" --------- Start motor control calculations -------");
-	// All calculations of speeds etc. are done in radiant. So we need to convert steps to radiant
 
-	delta_theta0 = delta_s0 * motor->alpha;
-	delta_theta1 = delta_s1 * motor->alpha;
 
+	// First, decide some important things. Are all inputs valid?
+	if (delta_t0 < 0 || delta_t1 < 0)
+	{
+		// negative times are crap. Stop stepper and report error
+		dbgprintf("Input error: negative times");
+		ctl->waiting = &stepper_shutoff;
+		return 0;
+	}
+
+	// Is the current cycle a zero-cycle?
 	if (delta_s0 == 0)
 	{
 		// This is a zero-cycle. No need for further calculation of anything.
-
+		dbgprintf("Detected zero-cycle. Motor-control stop.");
+		ctl->waiting = &stepper_shutoff;
+		return 0; // Passover speed after a stop-cycle is 0
 
 	}
-	else if (delta_s0 < 0)
+
+	// Does the next cycle go in the other direction as this one?
+	if (delta_s0 * delta_s1 < 0)
 	{
-		// TODO: Whatnot.
+		// If it does so, passover speed needs to be 0.
+		// This is achived by setting delta_s1 to 0. The algorithm itself chooses w_m_f to be 0, which is correct.
+		// The fact that we wrote 0 to delta_s1 is not relevant, because when it comes to this cycle, it will be reloaded
+		// as delta_s0 and executed correctly
+		delta_s1 = 0;
 	}
+
+	// Is the direction of this cycle backwards?
+	if (delta_s0 < 0)
+	{
+		// If so, the sign bits both of delta_s0 and delta_s1 need to be flipped, but the hardware direction is also flipped
+		// If the signs are different, delta_s1 has already been set to 0, so this does not matter.
+		delta_s0 = -delta_s0;
+		delta_s1 = -delta_s1;
+		dir_abs = -1;
+	}
+	else
+	{
+		dir_abs = 1;
+	}
+
+	// All calculations of speeds etc. are done in radiant. So we need to convert steps to radiant
+	delta_theta0 = delta_s0 * motor->alpha;
+	delta_theta1 = delta_s1 * motor->alpha;
 
 	// Mean speeds of cycles are base for some decisions
 	w_mean0 = (real) delta_theta0 / delta_t0;
@@ -179,10 +225,11 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 	neq_mean1 = w_mean1 * w_mean1 / (2 * alpha * acc);
 
 	// Decide if cycles are "slow" and therefore do not need any acceleration ramps
+	// It is important that first neq_mean1 is checked and then possibly overwritten by neq_mean0
 	if (neq_mean1 == 0)
 	{
 		w_m[0] = w_mean1;
-		// w_e is already w_mean1, which it is always.
+		// w_e is already w_mean1, which it is always. (because we cannot look in the future forever, so its a good compromise)
 		runs = 1;
 	}
 
@@ -361,17 +408,32 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 	else
 	{
 		dbgprintf("ERROR: Found nothing possible!");
+		ctl->waiting = &stepper_shutoff;
+		return 0;
 	}
 
+	d_s_f = 0; // Just so the warning goes away
+
 	// Post processing all values for setting up the ISR struct
+	// c is set by ISR
+	ctl->waiting->c_t = motor->alpha/(w_t0_f / F_TIMER) * FACTOR;
+	ctl->waiting->c_0 = F_TIMER * sqrt(2*motor->alpha/motor->acc) * CORR0; // * FACTOR / FACTOR, because CORR0 already contains FACTOR
+	// c_hw is set by ISR
+	ctl->waiting->c_ideal = delta_t0 * F_TIMER;
+	ctl->waiting->c_real = 0;
+
 	ctl->waiting->s = 0;
 	ctl->waiting->s_total = delta_s0;
 	ctl->waiting->s_on = (w_t0_f*w_t0_f - w_s*w_s)/(2*motor->alpha*dw_s) + S_EXTRA;
 	ctl->waiting->s_off = (delta_s0) - (w_m_f*w_m_f - w_t0_f*w_t0_f)/(2*motor->alpha*dw_m);
+	// n is set by ISR
 	ctl->waiting->neq_on = w_s*w_s/(2*motor->alpha*dw_s);
 	ctl->waiting->neq_off = w_t0_f*w_t0_f/(2*motor->alpha*dw_m);
-	ctl->waiting->c_0 = F_TIMER * sqrt(2*motor->alpha/motor->acc) * CORR0; // * FACTOR / FACTOR, because CORR0 already conta
-	ctl->waiting->c_t = motor->alpha/(w_t0_f / F_TIMER) * FACTOR;
+	ctl->waiting->shutoff = 0; // unless its a 0-cycle
+	ctl->waiting->running = 0; // Cycle is not activated yet
+	ctl->waiting->no_accel = slow0;
+	ctl->waiting->out_state = 0; // Always start with a low and wait first
+	ctl->waiting->dir_abs = dir_abs;
 	ctl->waiting->d_on = d_s_f;
 	ctl->waiting->d_off = d_m_f;
 
@@ -383,15 +445,6 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 		ctl->waiting->s_on = 0;
 		ctl->waiting->s_off = delta_s0;
 	}
-
-	ctl->waiting->c_ideal = delta_t0 * F_TIMER;
-	ctl->waiting->c_real = 0;
-	ctl->waiting->shutoff = 0; // unless its a 0-cycle
-	ctl->waiting->running = 0; // Cycle is not activated yet
-	ctl->waiting->no_accel = slow0;
-	ctl->waiting->dir_abs = 1; // TODO: Change to sensible value
-
-
 
 	// And thats it. Wow.
 	return w_m_f;

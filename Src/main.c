@@ -95,6 +95,7 @@ static void MX_GFXSIMULATOR_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+	int32_t cycle_number;
 
   /* USER CODE END 1 */
 
@@ -130,13 +131,21 @@ int main(void)
 
   SM_Init();
 
+  SM_restart_testcylce();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  SM_updateMotorControl();
+	  cycle_number = SM_updateMotorControl();
+
+	  if (cycle_number == TEST_POINTS - 2)
+	  {
+		  HAL_Delay(100);
+		  SM_restart_testcylce();
+	  }
 	  HAL_Delay(1);
 
 

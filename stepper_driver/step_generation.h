@@ -54,7 +54,7 @@ typedef struct
 
 typedef struct
 {
-	T_ISR_CONTROL 	z_dae_control[2];
+	T_ISR_CONTROL 	z_dae_control[2]; // This is the memory allocation for active and waiting structs. In active and waiting, there are the pointers of those two
 	T_ISR_CONTROL* 	active;
 	T_ISR_CONTROL* 	waiting;
 	int32_t			available; 	// Gets set to 1 if the waiting control struct has been updated and is ready to use in the next cycle

@@ -148,6 +148,10 @@ void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * ctl)
 	if (ctl->available == 1)
 	{
 		ctl->active = ctl->waiting;
+		if (ctl->active->shutoff == 1)
+		{
+			dbgprintf("Swapped in stop-struct. c_err = %d", z_dae_motor.c_err);
+		}
 		if (ctl->active == &(ctl->z_dae_control[0]))
 		{
 			ctl->waiting = &(ctl->z_dae_control[1]);

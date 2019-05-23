@@ -19,7 +19,12 @@ typedef struct
 	real				w_s;
 } T_SPT_SETUP; // meaning steps per time setup
 
+// Struct containing test motor data
+#define TEST_POINTS			7
+
+
 // PROTOTYPES
 void SM_Init(void);
-void SM_updateMotorControl(void);
+int32_t SM_updateMotorControl(void);
+void SM_restart_testcylce (void);
 
