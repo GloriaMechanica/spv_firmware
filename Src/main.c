@@ -143,7 +143,7 @@ int main(void)
 
 	  if (cycle_number == TEST_POINTS - 2)
 	  {
-		  HAL_Delay(100);
+		  HAL_Delay(5000);
 		  SM_restart_testcylce();
 	  }
 	  HAL_Delay(1);

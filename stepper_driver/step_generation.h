@@ -8,8 +8,7 @@
 // A sort of fixed-point arithmetic is used
 #define FACTOR			1000
 #define PI				(3.141592654F)
-#define CORR0			6760				// Internally devided by 1000, so it should really mean 0.676
-#define CORR1			6100
+#define CORR0			676					// Internally devided by 1000, so it should really mean 0.676
 #define C_TABLE_SIZE	1200				// Size of acceleration table. That is the maximum number of accelerating steps starting at zero speed.
 
 // Timer setup
@@ -25,6 +24,8 @@ typedef struct
 	float 		w_max; 			// maximal allowed motor speed [rad/sec]
 	float 		alpha; 			// Rotor angle per step [rad]
 	int32_t		c_err; 			// Difference in actual and relative timer ticks (for correction)
+	int32_t 	overshoot_on; 	// Keeps overshoot-ticks from last cycle to be extracted when calculating the next cycle
+	int32_t		overshoot_off; 	// same.
 } T_STEPPER_STATE;
 
 // Contains information for ISR Setup of one cycle
@@ -50,6 +51,8 @@ typedef struct
 	int32_t 	d_on; 			// direction of acceleration at the beginning of cycle. 1 means faster, -1 means slower
 	int32_t		d_off; 			// direction of acceleration at the end of cycle. 1 means faster, -1 means slower
 	int32_t		*c_table; 		// Acceleration table. This pointer points to the right table somewhere in the ram to be used with this motor.
+	int32_t		overshoot_on; 	// Counter for how much overshoot was done when starting up
+	int32_t		overshoot_off; 	// Counter for how much overshoot was done when approaching passover speed
 } T_ISR_CONTROL;
 
 typedef struct

@@ -37,6 +37,7 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl);
 void z_dae_init(T_STEPPER_STATE* stat, T_ISR_CONTROL_SWAP *swap);
 void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state);
 void accel_table_init(int32_t *array, uint32_t length, double acceleration, double alpha);
+static int32_t absolute(int32_t arg);
 
 // FUNCTIONS
 
@@ -47,11 +48,12 @@ void accel_table_init(int32_t *array, uint32_t length, double acceleration, doub
  */
 void STG_Init (void)
 {
-	// Init the individual motors
-	z_dae_init(&z_dae_motor, &z_dae_swap);
 
 	// Calculate acceleration table which is held in RAM for making the ISR as short as possible
 	accel_table_init(c_table_z, C_TABLE_SIZE, Z_ACCEL_MAX, Z_ALPHA);
+
+	// Init the individual motors
+	z_dae_init(&z_dae_motor, &z_dae_swap);
 
 	// Start timers
 	HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
@@ -78,7 +80,7 @@ void accel_table_init(int32_t *array, uint32_t length, real acceleration, real a
 	for (i = 0; i < length; i++)
 	{
 		// Const acceleration calculation according to D. Austin
-		array[i + 1] = array[i] - 2 * array[i] / (4*i + 1);
+		array[i + 1] = array[i] - 2 * array[i] / (4*(i+1) + 1);
 	}
 }
 
@@ -94,6 +96,13 @@ void z_dae_init(T_STEPPER_STATE* stat, T_ISR_CONTROL_SWAP *swap)
 	stat->acc = Z_ACCEL_MAX;
 	stat->w_max = Z_SPEED_MAX;
 	stat->alpha = Z_ALPHA;
+	stat->c_err = 0;
+	stat->overshoot_on = 0;
+	stat->overshoot_off = 0;
+
+	// Put pointers for c_table in place
+	z_dae_swap.z_dae_control[0].c_table = c_table_z;
+	z_dae_swap.z_dae_control[1].c_table = c_table_z;
 
 	// Initialize isr control swap stuff
 	swap->active = &stepper_shutoff;
@@ -127,6 +136,7 @@ void STG_StartCycle(T_ISR_CONTROL_SWAP *ctl)
 		// in case the cycle was already running, we reset it (should ususally not be necessary)
 		ctl->active->s = 0;
 		ctl->active->running = 1;
+		z_dae_motor.c_err = 0;
 
 		// And finally offset the timer by 1, so that it starts at the next tick (which is statistically 0.5 intervals away).
 		tim_preload = __HAL_TIM_GET_COUNTER(&htim1) + 1;
@@ -147,29 +157,33 @@ void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * ctl)
 {
 	if (ctl->available == 1)
 	{
+
 		ctl->active = ctl->waiting;
-		if (ctl->active->shutoff == 1)
-		{
-			dbgprintf("Swapped in stop-struct. c_err = %d", z_dae_motor.c_err);
-		}
 		if (ctl->active == &(ctl->z_dae_control[0]))
 		{
 			ctl->waiting = &(ctl->z_dae_control[1]);
-			  toggle_debug_led();
+
 		}
 		else
 		{
 			ctl->waiting = &(ctl->z_dae_control[0]);
 		}
 
+		if (ctl->active->shutoff == 1)
+		{
+			// Maybe something special to do with c_err here?
+		}
+
 		ctl->active->running = 1;
 		ctl->available = 0;	// Mark that the now waiting one does not contain valid information.
+		toggle_debug_led();
 	}
 	else
 	{
 		// for some reason the waiting control sturct has not been updated. As we cannot do anything
 		// sensible now, we stop the motor immediately (for now).
 		ctl->active = &stepper_shutoff;
+		dbgprintf("Swap ISR control: no new struct available");
 	}
 }
 
@@ -187,7 +201,7 @@ void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * ctl)
  */
 uint16_t step_calculations(T_ISR_CONTROL *ctl)
 {
-	uint16_t c_temp;
+	int32_t c_temp;
 	if (ctl->s < ctl->s_on)
 	{
 		if (ctl->s == 0)
@@ -201,19 +215,20 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl)
 		}
 		else
 		{
-			c_temp = ctl->c_table[ctl->n];
+			c_temp = ctl->c_table[absolute(ctl->n)];
 		}
 
 		ctl->n++;
 
 		// Overshoot protection
-		if ((c_temp - ctl->c_t)*ctl->d_on >= 0)
+		if ((c_temp - ctl->c_t)*(ctl->d_on) >= 0)
 		{
 			ctl->c = c_temp;
 		}
 		else
 		{
 			// Count overshoot here for debug purposes
+			ctl->overshoot_on++;
 		}
 	}
 	else if (ctl->s >= ctl->s_off)
@@ -229,18 +244,19 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl)
 		}
 		else
 		{
-			c_temp = ctl->c_table[ctl->n];
+			c_temp = ctl->c_table[absolute(ctl->n)];
 		}
 
 		ctl->n++;
 
-		if ((ctl->c_t - c_temp)*ctl->d_off >= 0)
+		if ((ctl->c_t - c_temp)*(ctl->d_off) >= 0)
 		{
 			ctl->c = c_temp;
 		}
 		else
 		{
 			// Count overshoot here for debug purposes
+			ctl->overshoot_off++;
 		}
 	}
 	else
@@ -271,10 +287,13 @@ void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state)
 	{
 		// Save the difference in timer ticks this cycle produced for information and possibly correction at some point.
 		state->c_err += ctl->active->c_real - ctl->active->c_ideal;
+		state->overshoot_on = ctl->active->overshoot_on;
+		state->overshoot_off = ctl->active->overshoot_off;
 
 		// Swap the buffers and start a new cycle
 		STG_swapISRcontrol(ctl);
 	}
+
 }
 
 void tim1_cc_irq_handler (void)
@@ -371,6 +390,18 @@ void tim1_cc_irq_handler (void)
 
 		  }
 	  }
+}
+
+/** @brief If argument is negative, this function returns -argument. Absolute.
+ *  @param [in/out] *ctl - 	swap structure with both control structures
+ *  @return (none)
+ */
+static int32_t absolute(int32_t arg)
+{
+	if (arg < 0)
+		return -arg;
+
+	return arg;
 }
 
 

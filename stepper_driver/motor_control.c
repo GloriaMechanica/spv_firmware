@@ -13,8 +13,8 @@
 #include <math.h>
 
 // Debug-only stuff
-int32_t test_positions[TEST_POINTS] = {0, 1000, 2000, 1500, 1510, 0, 0};
-int32_t test_times[TEST_POINTS] = 	  {0, 400, 650, 900, 1200, 1300, 1400 };
+int32_t test_positions[TEST_POINTS] = {0, 	1000, 	2000, 	2200, 	500, 		1000, 	1000, 1000};
+int32_t test_times[TEST_POINTS] = 	  {0, 	300, 	700, 	1200, 	1800, 	2800, 	3000, 4000};
 real w_old;
 
 int32_t cycle_number;
@@ -48,6 +48,8 @@ void SM_Init (void)
 	stepper_shutoff.shutoff = 1; // <- thats the important one
 	stepper_shutoff.running = 0; // Really does not matter in this case
 	stepper_shutoff.no_accel = 1;
+	stepper_shutoff.overshoot_on = 0;
+	stepper_shutoff.overshoot_off = 0;
 
 	// Step generation setup (activates timers etc.)
 	STG_Init();
@@ -155,10 +157,20 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 	int32_t	neq_mean0;
 	int32_t neq_mean1;
 
+	// Information of last cycle (how it performed during execution)
+	dbgprintf(" --------- Last cycle information -----------------");
+	dbgprintf("Timing error: %f ms (%d ticks)", (real) motor->c_err * 1000 / F_TIMER, motor->c_err);
+	dbgprintf("Overshoot on: %d Overshoot off: %d", motor->overshoot_on, motor->overshoot_off);
+
 
 	// ------------ start calculations ------------------------------------
 	dbgprintf(" --------- Start motor control calculations -------");
 
+
+	// Print out input parameters for test purposes
+	dbgprintf("delta_s0: %d steps  in   delta_t0: %d ms", setup->delta_s0, setup->delta_t0);
+	dbgprintf("delta_s1: %d steps  in   delta_t1: %d ms", setup->delta_s1, setup->delta_t1);
+	dbgprintf("start speed: %f rad/s", setup->w_s);
 
 	// First, decide some important things. Are all inputs valid?
 	if (delta_t0 < 0 || delta_t1 < 0)
@@ -363,10 +375,11 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 	w_m_f = W_ERR;
 	w_t0_f = W_ERR;
 	w_t1_f = W_ERR;
+	d_s_f = 0; // Initialize, just so the warning goes away
 
 	for (i = 0; i < runs; i++)
 	{
-		if (w_t0[i] >= 0 && w_t0[i] < motor->w_max && w_t1[i] >= 0 && w_t1[i] < motor->w_max && w_diff[i] < w_min)
+		if (((w_t0[i] >= 0) && (w_t0[i] < motor->w_max) && (w_t1[i] >= 0) && (w_t1[i] < motor->w_max) && (w_diff[i] < w_min)) || slow0)
 		{
 			// Its better than the previous, so we take it
 			w_min = w_diff[i];
@@ -407,12 +420,10 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 	}
 	else
 	{
-		dbgprintf("ERROR: Found nothing possible!");
+		dbgprintf("ERROR: Found nothing possible! (w_m = %f)", w_m_f);
 		ctl->waiting = &stepper_shutoff;
 		return 0;
 	}
-
-	d_s_f = 0; // Just so the warning goes away
 
 	// Post processing all values for setting up the ISR struct
 	// c is set by ISR
@@ -446,6 +457,13 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 		ctl->waiting->s_off = delta_s0;
 	}
 
+	dbgprintf("s_total: %d s_on: %d s_off: %d", ctl->waiting->s_total, ctl->waiting->s_on, ctl->waiting->s_off);
+	dbgprintf("neq_on: %d neq_off: %d ", ctl->waiting->neq_on, ctl->waiting->neq_off);
+	dbgprintf("c_0: %d c_t: %d", ctl->waiting->c_0, ctl->waiting->c_t);
+	dbgprintf("d_on: %d d_off: %d", ctl->waiting->d_on, ctl->waiting->d_off);
+	dbgprintf("dir_abs: %d slow: %d", ctl->waiting->dir_abs, ctl->waiting->no_accel);
+
+	dbgprintf("-------- Finished motor control calculations -------------");
 	// And thats it. Wow.
 	return w_m_f;
 }
