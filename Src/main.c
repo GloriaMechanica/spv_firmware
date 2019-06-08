@@ -129,6 +129,8 @@ int main(void)
    */
   USB_CDC_Init();
 
+  debug_start_motor_tracking();
+
   SM_Init();
 
   SM_restart_testcylce();
@@ -137,16 +139,34 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  int32_t wait_delay = 0;
   while (1)
   {
+
+	  HAL_Delay(1);
 	  cycle_number = SM_updateMotorControl();
+
+
 
 	  if (cycle_number == TEST_POINTS - 2)
 	  {
-		  HAL_Delay(5000);
-		  SM_restart_testcylce();
+		  if (wait_delay == 2000)
+		  {
+			  SM_restart_testcylce();
+			  wait_delay = 0;
+		  }
+		  else
+		  {
+			  wait_delay++;
+		  }
+
 	  }
-	  HAL_Delay(1);
+
+
+	  // Update debug transmit values
+	  debug_transmit_motor_tracking_data();
+
+
 
 
 

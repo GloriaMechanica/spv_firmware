@@ -20,7 +20,7 @@ typedef struct
 } T_SPT_SETUP; // meaning steps per time setup
 
 // Struct containing test motor data
-#define TEST_POINTS			8
+#define TEST_POINTS			9
 
 
 // PROTOTYPES

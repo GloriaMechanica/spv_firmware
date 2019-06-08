@@ -319,6 +319,13 @@ void tim1_cc_irq_handler (void)
 	    	ctl = &z_dae_swap;
 	    	state = &z_dae_motor;
 
+	    	// First check if the cycle is finished already. This is done only on the falling edge of the step pulse (save interrupt time)
+	    	if (ctl->active->out_state == 0 && ctl->active->running == 1 && ctl->active->shutoff == 0)
+	    	{
+				// If yes, the swap is performed here, so from here on all ctl->active values changed!
+				check_cycle_status(ctl, state);
+	    	}
+
 	    	if (ctl->active->running == 1 && ctl->active->shutoff == 0)
 	    	{
 	    		if (ctl->active->out_state == 1)
@@ -339,12 +346,12 @@ void tim1_cc_irq_handler (void)
 	    			htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
 	    			htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
 
-	    			// Check if cycle is finished by now
-	    			check_cycle_status(ctl, state);
-
 	    			// Recalculate timer preload out of old or new control struct
 	    			tim1_c_hw = step_calculations(ctl->active);
 	    			tim1_preload = tim1_cnt + tim1_c_hw - STEP_PULSE_WIDTH;
+
+	    			// throw out for debug purposes (drawing nice graphs)
+	    			debug_push_preload(tim1_c_hw);
 
 	    			// Take care of direction pin.
 	    			switch(ctl->active->dir_abs * Z_DAE_FLIP_DIR)

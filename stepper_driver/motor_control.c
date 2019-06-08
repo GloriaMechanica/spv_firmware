@@ -13,8 +13,8 @@
 #include <math.h>
 
 // Debug-only stuff
-int32_t test_positions[TEST_POINTS] = {0, 	1000, 	2000, 	2200, 	500, 		1000, 	1000, 1000};
-int32_t test_times[TEST_POINTS] = 	  {0, 	300, 	700, 	1200, 	1800, 	2800, 	3000, 4000};
+int32_t test_positions[TEST_POINTS] = {0, 	1000, 	2000, 	3100, 	500, 	1000, 	0, 		0, 		0};
+int32_t test_times[TEST_POINTS] = 	  {0, 	300, 	700, 	1200, 	1800, 	2800, 	3000, 	4000, 	4500};
 real w_old;
 
 int32_t cycle_number;
@@ -50,6 +50,7 @@ void SM_Init (void)
 	stepper_shutoff.no_accel = 1;
 	stepper_shutoff.overshoot_on = 0;
 	stepper_shutoff.overshoot_off = 0;
+	stepper_shutoff.out_state = 0;
 
 	// Step generation setup (activates timers etc.)
 	STG_Init();
@@ -443,7 +444,7 @@ real calculate_motor_control (T_SPT_SETUP *setup,  T_STEPPER_STATE *motor, T_ISR
 	ctl->waiting->shutoff = 0; // unless its a 0-cycle
 	ctl->waiting->running = 0; // Cycle is not activated yet
 	ctl->waiting->no_accel = slow0;
-	ctl->waiting->out_state = 0; // Always start with a low and wait first
+	ctl->waiting->out_state = 0; // Always start with a low and wait first (DO NOT CHANGE!)
 	ctl->waiting->dir_abs = dir_abs;
 	ctl->waiting->d_on = d_s_f;
 	ctl->waiting->d_off = d_m_f;

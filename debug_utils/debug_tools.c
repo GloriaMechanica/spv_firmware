@@ -17,11 +17,21 @@
 #include <stdarg.h>
 #include "device_handles.h"
 #include "debug_tools.h"
+#include "usb_cdc_comm.h"
 
 // PRIVATE DEFINES
 #define 	DEBUG_UART_HANDLE			&huart3		// Handle of the uart to be used as debug uart
 #define 	DEBUG_UART_TX_BUFFER_SIZE	256  		// string of dbgprintf must not be longer than that
-#define		DEBUG_UART_TX_TIMEOUT		1000 		// [ms]. Pretty useless, but driver needs that
+#define		DEBUG_UART_TX_TIMEOUT		5000 		// [ms]. Pretty useless, but driver needs that
+
+// Used to save and export the real motor movements on the PC
+#define 	DEBUG_MOTOR_TRACKING_BUFFER_SIZE		4096		// Size of big timer preload value array
+#define 	DEBUG_MOTOR_TRACKING_MAX_BLOCK_SIZE		256		// How many bytes to transmit with one hit
+uint16_t 	debug_preload_buffer[DEBUG_MOTOR_TRACKING_BUFFER_SIZE];
+int32_t 	debug_motor_tracking_input_pointer; 				// pointing to the next free buffer word
+int32_t 	debug_motor_tracking_output_pointer; 				// pointing to the next word to read out
+uint32_t 	debug_motor_tracking_running; 						// Flag whether timer preload values should be output via USB
+uint32_t 	debug_motor_tracking_drop_counter; 					// Counts how many timer values had to be dropped because they could not be emptied fast enough
 
 
 
@@ -95,6 +105,132 @@ void cpu_load_pin_on (void)
 void cpu_load_pin_off (void)
 {
     CPU_LOAD_GPIO_Port->BSRR = (uint32_t)CPU_LOAD_Pin << 16;
+}
+
+
+/** @brief  Initializes the timer preload debug output functions and starts it
+ *
+ *  @param  (none)
+ *  @return (none)
+ */
+void debug_start_motor_tracking (void)
+{
+	debug_motor_tracking_input_pointer = 0;  	// start and stop are the same-> buffer is empty
+	debug_motor_tracking_output_pointer = 0;
+	debug_motor_tracking_running = 1; 			// start outputting values
+}
+
+/** @brief  Stops the motor speed tracking function
+ *
+ *  @param  (none)
+ *  @return (none)
+ */
+void debug_stop_motor_tracking (void)
+{
+	debug_motor_tracking_running = 0;
+}
+
+/** @brief 	Saves the current timer preload value (c_hw, to be precise) on a buffer
+ * 			From this buffer, it will be spit out over the USB CDC UART from the main loop
+ * 			housekeeper.
+ *
+ * 			If the buffer should overflow, it drops the values and writes an error
+ * 			over the debug uart
+ *
+ *  @param c_hw - 16 bit timer preload value (number of ticks to the next step.
+ *  @return (none)
+ */
+void debug_push_preload(uint16_t preload)
+{
+	int32_t words_in_buffer = debug_motor_tracking_input_pointer - debug_motor_tracking_output_pointer;
+	if (words_in_buffer < 0)
+		words_in_buffer += DEBUG_MOTOR_TRACKING_BUFFER_SIZE; // If input overflowed, but output did not so far
+
+	if (debug_motor_tracking_running == 1)
+	{
+		if (words_in_buffer < DEBUG_MOTOR_TRACKING_BUFFER_SIZE - 1) // One byte less, because input==output means empty
+		{
+			// There is still space in the buffer
+			debug_preload_buffer[debug_motor_tracking_input_pointer] = preload;
+			debug_motor_tracking_input_pointer = (debug_motor_tracking_input_pointer + 1) % DEBUG_MOTOR_TRACKING_BUFFER_SIZE; // Increment and
+		}
+		else
+		{
+			// There was no space in the buffer.
+			debug_motor_tracking_drop_counter++;
+		}
+	}
+}
+
+/** @brief 	Function to be periodically called by the main loop for clearing out the
+ * 			data accumulated in the preload buffer.
+ *
+ *  @param c_hw - 16 bit timer preload value (number of ticks to the next step.
+ *  @return (none)
+ */
+void debug_transmit_motor_tracking_data (void)
+{
+	if (debug_motor_tracking_running == 1)
+	{
+		// Only do something if this feature is activated
+
+		// Calculate how many words are in the buffer
+		int32_t words_in_buffer = debug_motor_tracking_input_pointer - debug_motor_tracking_output_pointer;
+		int32_t words_to_transmit;
+
+		if (words_in_buffer < 0)
+			words_in_buffer += DEBUG_MOTOR_TRACKING_BUFFER_SIZE; // If input overflowed, but output did not so far
+
+		// There is something in the buffer to print
+		if (words_in_buffer > 0)
+		{
+			// Transmit what's there, but a maximum of the DEBUG_MOTOR_TRACKING_MAX_BLOCK_SIZE
+			words_to_transmit = words_in_buffer;
+			if (words_to_transmit > DEBUG_MOTOR_TRACKING_MAX_BLOCK_SIZE)
+				words_to_transmit = DEBUG_MOTOR_TRACKING_MAX_BLOCK_SIZE;
+
+			// And actually transmit via USB CDC UART
+			// Two cases because data region is split when input overflowed but output did not yet
+			if (debug_motor_tracking_input_pointer > debug_motor_tracking_output_pointer)
+			{
+				// data region is one block
+				uint16_t *start_pointer = &(debug_preload_buffer[debug_motor_tracking_output_pointer]);
+				uint32_t data_length = words_to_transmit * sizeof(uint16_t);
+
+				USB_CDC_TransmitBuffer((uint8_t*)start_pointer, data_length);
+			}
+			else
+			{
+				// region is split. one goes from output_pointer to top and one from 0 to input-pointer -1
+				// first chunk from output_pointer to top
+				uint16_t *start_pointer = &(debug_preload_buffer[debug_motor_tracking_output_pointer]);
+				uint32_t words_in_top_part = DEBUG_MOTOR_TRACKING_BUFFER_SIZE - debug_motor_tracking_output_pointer;
+				if (words_in_top_part > words_to_transmit)
+					words_in_top_part = words_to_transmit;
+				uint32_t data_length =  words_in_top_part * sizeof(uint16_t);
+
+				USB_CDC_TransmitBuffer((uint8_t*)start_pointer, data_length);
+
+				// second chunk from 0 upwards containing the remaining values
+				start_pointer = &(debug_preload_buffer[0]);
+				data_length = (words_to_transmit - words_in_top_part) * sizeof(uint16_t);
+
+				if (data_length > 0)
+					USB_CDC_TransmitBuffer((uint8_t*)start_pointer, data_length);
+			}
+
+			// And increment output pointer accordingly
+			debug_motor_tracking_output_pointer = (debug_motor_tracking_output_pointer + words_to_transmit) % DEBUG_MOTOR_TRACKING_BUFFER_SIZE;
+		}
+	}
+
+	// The ISR could not write one or more values, so the data is not continuous
+	if (debug_motor_tracking_drop_counter > 0)
+	{
+		dbgprintf("##### MOTOR TRACKING ERRROR BUFFER OVERFLOW (%d words) !!! #####", debug_motor_tracking_drop_counter);
+		debug_motor_tracking_drop_counter = 0;
+	}
+
 }
 
 
