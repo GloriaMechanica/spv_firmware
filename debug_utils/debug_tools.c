@@ -108,7 +108,10 @@ void cpu_load_pin_off (void)
 }
 
 
-/** @brief  Initializes the timer preload debug output functions and starts it
+/** @brief  Initializes the timer preload debug output functions and starts it.
+ *  		This function is used to directly print each timer preload over the
+ *  		USB-CDC connection. With the "real" hardware timer preloads, it is
+ *  		easier to find out if something in the stepper engine is going wrong.
  *
  *  @param  (none)
  *  @return (none)
