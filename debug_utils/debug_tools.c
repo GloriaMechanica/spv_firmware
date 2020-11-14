@@ -25,7 +25,7 @@
 #define		DEBUG_UART_TX_TIMEOUT		5000 		// [ms]. Pretty useless, but driver needs that
 
 // Used to save and export the real motor movements on the PC
-#define 	DEBUG_MOTOR_TRACKING_BUFFER_SIZE		4096		// Size of big timer preload value array
+#define 	DEBUG_MOTOR_TRACKING_BUFFER_SIZE		16384		// Size of big timer preload value array
 #define 	DEBUG_MOTOR_TRACKING_MAX_BLOCK_SIZE		256		// How many bytes to transmit with one hit
 uint16_t 	debug_preload_buffer[DEBUG_MOTOR_TRACKING_BUFFER_SIZE];
 int32_t 	debug_motor_tracking_input_pointer; 				// pointing to the next free buffer word
@@ -128,9 +128,29 @@ void debug_start_motor_tracking (void)
  *  @param  (none)
  *  @return (none)
  */
-void debug_stop_motor_tracking (void)
+void debug_stop_motor_tracking(void)
 {
 	debug_motor_tracking_running = 0;
+}
+
+/** @brief  Puts a header in the buffer indicating that a new cycle follows.
+ *
+ *  @param  delta_s: amount of steps in this cycle (for debugging info)
+ *  @param  delta_t: time of this cycle in ms
+ *  @return (none)
+ */
+void debug_indicate_cycle_start(uint16_t delta_s, uint16_t delta_t)
+{
+	if (debug_motor_tracking_running == 1)
+	{
+		int i = 0;
+		for(i=0; i<4; i++)
+		{
+			debug_push_preload(0x0000); // Push zeros, because zeros cannnot occur as timer preload
+		}
+		debug_push_preload(delta_s);
+		debug_push_preload(delta_t);
+	}
 }
 
 /** @brief 	Saves the current timer preload value (c_hw, to be precise) on a buffer
@@ -167,6 +187,9 @@ void debug_push_preload(uint16_t preload)
 
 /** @brief 	Function to be periodically called by the main loop for clearing out the
  * 			data accumulated in the preload buffer.
+ *
+ * 			At each call, it transmits what is there, but a maximum of 256 bytes.
+ * 			If there are more than 256 bytes, it needs to be called more often.
  *
  *  @param c_hw - 16 bit timer preload value (number of ticks to the next step.
  *  @return (none)

@@ -30,7 +30,8 @@ int32_t 	c_table_xy[C_TABLE_SIZE]; 		// contains timer preload values for each a
 // DAE - Z - Axis
 uint8_t z_dae_output_state;
 
-#define STEP_PULSE_WIDTH 	10
+#define STEP_PULSE_WIDTH 	F_TIMER/25000 // Width of step pulse. Has basically no effect on CPU load, but should not be too short
+										  // in order for the ISR to finish before the next interrupt comes. currently set to 40us.
 
 // PROTOTYPES
 uint16_t step_calculations(T_ISR_CONTROL *ctl);
@@ -48,7 +49,6 @@ static int32_t absolute(int32_t arg);
  */
 void STG_Init (void)
 {
-
 	// Calculate acceleration table which is held in RAM for making the ISR as short as possible
 	accel_table_init(c_table_z, C_TABLE_SIZE, Z_ACCEL_MAX, Z_ALPHA);
 
@@ -63,28 +63,31 @@ void STG_Init (void)
  *
  *  @param array - pointer to array for all preload values. Has to be of of lengh "length"
  *  @param length - length of acceleration array.
- *  @param acceleration - well, just that ... [rad/sec^2]
+ *  @param acceleration - that motor will accel/decel with, in [rad/sec^2]
  *  @param alpha - angle which the rotor moves when making one step pulse [rad/step]
  *
  *  @return (none)
  */
 void accel_table_init(int32_t *array, uint32_t length, real acceleration, real alpha)
 {
-	int32_t c_0;
 	uint32_t i;
+	real c_temp = 0.0F;
 
-	// Calculate start preload
-	c_0 = F_TIMER * sqrt(2*alpha/acceleration) * CORR0; // * FACTOR / FACTOR, because CORR0 contains it already.
-
-	array[0] = c_0;
-	for (i = 0; i < length; i++)
+	// New more exact way to calculate steptable by proper mechanical approach rather than taylor series.
+	for (i = 0; i < length-1; i++)
 	{
-		// Const acceleration calculation according to D. Austin
-		array[i + 1] = array[i] - 2 * array[i] / (4*(i+1) + 1);
+		c_temp = (real) F_TIMER * (real) FACTOR * sqrt(2*alpha/acceleration) * (sqrt(i+1) - sqrt(i));
+		array[i] = c_temp;
+	}
+
+	dbgprintf(" Step table output \n");
+	for (i = 0; i < length-1; i++)
+	{
+		dbgprintf("%d: %d", i, array[i]);
 	}
 }
 
-/** @brief 	Initialisation of motor state and swap buffer for Z-DAE-Axis
+/** @brief 	Initialisation of motor state and ISR swap structure for Z-DAE-Axis
  *
  *  @param (none)
  *  @return (none)
@@ -175,6 +178,7 @@ void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * ctl)
 		}
 
 		ctl->active->running = 1;
+		debug_indicate_cycle_start(ctl->active->s_total, ctl->active->c_ideal/(F_TIMER/1000));
 		ctl->available = 0;	// Mark that the now waiting one does not contain valid information.
 		toggle_debug_led();
 	}
@@ -228,6 +232,7 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl)
 		else
 		{
 			// Count overshoot here for debug purposes
+			ctl->c = ctl->c_t;
 			ctl->overshoot_on++;
 		}
 	}
@@ -251,6 +256,7 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl)
 
 		if ((ctl->c_t - c_temp)*(ctl->d_off) >= 0)
 		{
+			ctl->c = ctl->c_t;
 			ctl->c = c_temp;
 		}
 		else
@@ -267,6 +273,10 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl)
 
 	// set and return real hardware_count
 	ctl->c_hw = ctl->c / FACTOR;
+
+	// if c_hw is so large that it includes multiple rounds of the timer, it needs to be split in round count and rest.
+	ctl->c_hwr = (ctl->c_hw - STEP_PULSE_WIDTH) / C_MAX;
+	ctl->c_hwi = (ctl->c_hw - STEP_PULSE_WIDTH) % C_MAX;
 
 	// count the used up time to determine error
 	ctl->c_real += ctl->c_hw;
@@ -320,7 +330,8 @@ void tim1_cc_irq_handler (void)
 	    	state = &z_dae_motor;
 
 	    	// First check if the cycle is finished already. This is done only on the falling edge of the step pulse (save interrupt time)
-	    	if (ctl->active->out_state == 0 && ctl->active->running == 1 && ctl->active->shutoff == 0)
+	    	if (ctl->active->out_state == 0 && ctl->active->c_hwr == 0  && ctl->active->running == 1
+	    			&& ctl->active->shutoff == 0)
 	    	{
 				// If yes, the swap is performed here, so from here on all ctl->active values changed!
 				check_cycle_status(ctl, state);
@@ -330,6 +341,9 @@ void tim1_cc_irq_handler (void)
 	    	{
 	    		if (ctl->active->out_state == 1)
 	    		{
+	    			// We've just generated a positive edge and moved the motor.
+	    			// So in a couple of us, we will reset the step line to 0. (second part of this if)
+	    			// Configure timer so the pin goes low at the next overflow
 	    			ctl->active->out_state = 0;
 	    			htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
 	    			htim1.Instance->CCMR1 |= TIM_OCMODE_INACTIVE;
@@ -342,16 +356,38 @@ void tim1_cc_irq_handler (void)
 	    		}
 	    		else if (ctl->active->out_state == 0)
 	    		{
-	    			ctl->active->out_state = 1;
-	    			htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
-	    			htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
 
-	    			// Recalculate timer preload out of old or new control struct
-	    			tim1_c_hw = step_calculations(ctl->active);
-	    			tim1_preload = tim1_cnt + tim1_c_hw - STEP_PULSE_WIDTH;
 
-	    			// throw out for debug purposes (drawing nice graphs)
-	    			debug_push_preload(tim1_c_hw);
+
+	    			// The step line is at 0 again. We need to calculate how long it takes to the next step.
+	    			if (ctl->active->c_hwr == 0)
+	    			{
+	    				// We've completed all subsequent full rounds of the timer and process the next step.
+						// Recalculate timer preload out of old or new control struct
+						tim1_c_hw = step_calculations(ctl->active);
+						debug_push_preload(tim1_c_hw); // we need to push the full preload, not every individual round.
+
+						tim1_preload = tim1_cnt + ctl->active->c_hwi; // the PULSE_WIDTH is included in the step calculation already.
+
+						if (ctl->active->c_hwr == 0)
+						{
+							ctl->active->out_state = 1;
+							htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
+							htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
+						}
+	    			}
+	    			else if (ctl->active->c_hwr > 0)
+	    			{
+	    				// We've already waited the fraction of a round, but need to wait more full rounds.
+	    				tim1_preload = tim1_cnt + C_MAX;
+	    				ctl->active->c_hwr--;
+						if (ctl->active->c_hwr == 0)
+						{
+							ctl->active->out_state = 1;
+							htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
+							htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
+						}
+	    			}
 
 	    			// Take care of direction pin.
 	    			switch(ctl->active->dir_abs * Z_DAE_FLIP_DIR)

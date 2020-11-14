@@ -1,4 +1,4 @@
-/** @file debug_uart.h
+/** @file device_handles.h
  *  @brief Can be included in other files to access the hardware
  *  device handles that CubeMX generates in the main.
  *
@@ -17,3 +17,5 @@ extern SPI_HandleTypeDef hspi1;
 extern TIM_HandleTypeDef htim1;
 
 extern UART_HandleTypeDef huart3;
+
+extern SPI_HandleTypeDef hspi1;

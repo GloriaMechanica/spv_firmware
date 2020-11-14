@@ -17,7 +17,7 @@ typedef struct
 	int32_t 			delta_s1;
 	int32_t				delta_t1;
 	real				w_s;
-} T_SPT_SETUP; // meaning steps per time setup
+} T_SPT_CYCLESPEC; // meaning steps per time setup
 
 // Struct containing test motor data
 #define TEST_POINTS			9

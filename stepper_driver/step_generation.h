@@ -8,12 +8,11 @@
 // A sort of fixed-point arithmetic is used
 #define FACTOR			1000
 #define PI				(3.141592654F)
-#define CORR0			676					// Internally devided by 1000, so it should really mean 0.676
 #define C_TABLE_SIZE	1200				// Size of acceleration table. That is the maximum number of accelerating steps starting at zero speed.
 
 // Timer setup
-#define F_TIMER			250000				// TODO: Calculate from project settings later.
-#define C_MAX			65535				// Biggest possible timer preload in one cycle
+#define F_TIMER			8000000				// Motor timer frequency. currently 1MHz.
+#define C_MAX			65536				// 16 bit timer -> one revolution is 2^16 = 65536 ticks.
 
 // Contains motor parameters which are not dependent on the current cycle
 typedef struct
@@ -32,8 +31,9 @@ typedef struct
 typedef struct
 {	int32_t		c;				// ISR Timer preload (contains FACTOR!) [in timer ticks * FACTOR]
 	int32_t 	c_t; 			// Target speed preload value [in timer ticks * FACTOR]
-	int32_t 	c_0; 			// Timer preload for cold start  [in timer ticks * FACTOR]
 	int32_t 	c_hw; 			// Hardware timer preload. This value is actually put in the timer. [in timer ticks]
+	int32_t		c_hwi; 			// timer preload increment. c_hw = c_hwr * 65536 + c_hwi. Both together allow for about 4s between steps with 1MHz and FACTOR is 1000
+	int32_t 	c_hwr;			// timer preload rounds. If c_hw cannot be obtained by one full timer revolution, this is the round counter
 	int32_t		c_ideal; 		// Theoretical number of timer ticks in this cycle
 	int32_t		c_real; 		// Actual number of timer ticks this cycle took. Used to keep track of timing error accumulation.
 	int32_t		s; 				// Current relative step position in this cycle

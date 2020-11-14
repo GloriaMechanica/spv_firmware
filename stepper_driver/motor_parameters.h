@@ -11,7 +11,7 @@
 // Z-AXIS on "DAE Bogenzug" and "GDA Bogenzug"
 #define Z_STEPS_PER_REV		400			// For example 200 or 400 Steps per revolution
 #define Z_STEP_MODE			4			// 1 for full step, 2 for half step, 4 for quater step ...
-#define Z_ACCEL_MAX			(400.0F)		// maximal acceleration on this axis, [rad/sec^2]
+#define Z_ACCEL_MAX			(800.0F)		// maximal acceleration on this axis, [rad/sec^2]
 #define Z_SPEED_MAX			(50.0F)		// maximal speed on this axis [rad/sec]
 #define Z_DAE_FLIP_DIR		1		// If set to -1, the direction is flipped, it runs backwards.
 #define Z_GDA_FLIP_DIR		1		// If set to -1, the direction is flipped, it runs backwards.

@@ -19,12 +19,12 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
-#include <step_generation.h>
 #include "main.h"
 #include "stm32f7xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "debug_tools.h"
+#include "step_generation.h"
 /* USER CODE END Includes */
   
 /* Private typedef -----------------------------------------------------------*/
