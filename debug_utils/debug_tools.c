@@ -107,6 +107,16 @@ void cpu_load_pin_off (void)
     CPU_LOAD_GPIO_Port->BSRR = (uint32_t)CPU_LOAD_Pin << 16;
 }
 
+void isr_load_pin_on (void)
+{
+    ISR_LOAD_GPIO_Port->BSRR = ISR_LOAD_Pin;
+}
+
+void isr_load_pin_off (void)
+{
+    ISR_LOAD_GPIO_Port->BSRR = (uint32_t)ISR_LOAD_Pin << 16;
+}
+
 
 /** @brief  Initializes the timer preload debug output functions and starts it.
  *  		This function is used to directly print each timer preload over the

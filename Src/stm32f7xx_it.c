@@ -25,6 +25,7 @@
 /* USER CODE BEGIN Includes */
 #include "debug_tools.h"
 #include "step_generation.h"
+#include "motor_parameters.h"
 /* USER CODE END Includes */
   
 /* Private typedef -----------------------------------------------------------*/
@@ -206,8 +207,53 @@ void SysTick_Handler(void)
 void TIM1_CC_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM1_CC_IRQn 0 */
-  cpu_load_pin_on();
-  tim1_cc_irq_handler(); // Custom interrupt handler for Timer 1
+	isr_load_pin_on();
+
+	// We make a local pointer for copy and paste purposes of the other axis.
+	uint16_t 	tim1_cnt;
+
+	// Read out current timer state
+	tim1_cnt = __HAL_TIM_GET_COUNTER(&htim1);
+
+	// Check if the interrupt was created by CC1
+	if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC1) != RESET)
+	{
+	  if (__HAL_TIM_GET_IT_SOURCE(&htim1, TIM_IT_CC1) != RESET)
+	  {
+		  // Clear interrupt source, otherwise interrupt is permanently executed
+		  __HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC1);
+		  htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_1;
+
+		  // prepare for next step and do everything else
+		  isr_update_stg(TIMER1_CHANNEL1_MOTOR, tim1_cnt);
+	  }
+	}
+
+	// Check if the interrupt was created by CC2
+	if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC2) != RESET)
+	{
+	  if (__HAL_TIM_GET_IT_SOURCE(&htim1, TIM_IT_CC2) != RESET)
+	  {
+		  __HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC2);
+		  htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_2;
+
+		  // prepare for next step and do everything else
+		  isr_update_stg(TIMER1_CHANNEL2_MOTOR, tim1_cnt);
+	  }
+	}
+
+	// Check if the interrupt was created by CC3
+	if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC3) != RESET)
+	{
+	  if (__HAL_TIM_GET_IT_SOURCE(&htim1, TIM_IT_CC3) != RESET)
+	  {
+		  __HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC3);
+		  htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_3;
+
+		  // prepare for next step and do everything else
+		  isr_update_stg(TIMER1_CHANNEL3_MOTOR, tim1_cnt);
+	  }
+	}
 
   // We cut the HAL interrupt handler out because it does nothing sensible and takes way too long.
 #if (0)
@@ -215,7 +261,7 @@ void TIM1_CC_IRQHandler(void)
   HAL_TIM_IRQHandler(&htim1);
   /* USER CODE BEGIN TIM1_CC_IRQn 1 */
 #endif
-  cpu_load_pin_off();
+  isr_load_pin_off();
 
   /* USER CODE END TIM1_CC_IRQn 1 */
 }

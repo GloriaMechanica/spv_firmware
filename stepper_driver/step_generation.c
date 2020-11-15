@@ -20,23 +20,18 @@
 #include "motor_parameters.h"
 #include <math.h>
 
-// Is used in ISR. Contains the current CNT-register state of timer1
-uint16_t 	tim1_cnt;
-uint16_t 	tim1_c_hw;
-uint16_t 	tim1_preload;
-int32_t 	c_table_z[C_TABLE_SIZE]; 		// Contains timer preload values for each acceleration index n for both z-axis
 int32_t 	c_table_xy[C_TABLE_SIZE]; 		// contains timer preload values for each acceleration index n for all x and y axis
+int32_t 	c_table_z[C_TABLE_SIZE]; 		// Contains timer preload values for each acceleration index n for both z-axis
 
-// DAE - Z - Axis
-uint8_t z_dae_output_state;
-
-#define STEP_PULSE_WIDTH 	F_TIMER/25000 // Width of step pulse. Has basically no effect on CPU load, but should not be too short
-										  // in order for the ISR to finish before the next interrupt comes. currently set to 40us.
+// Width of step pulse. Has basically no effect on CPU load, but should not be too short
+// in order for the ISR to finish before the next interrupt comes. currently set to 40us.
+#define STEP_PULSE_WIDTH 	F_TIMER/25000
 
 // PROTOTYPES
-uint16_t step_calculations(T_ISR_CONTROL *ctl);
-void z_dae_init(T_STEPPER_STATE* stat, T_ISR_CONTROL_SWAP *swap);
-void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state);
+uint16_t step_calculations(T_ISR_CONTROL *isr);
+void xy_type_init(T_MOTOR_CONTROL *ctl);
+void z_type_init(T_MOTOR_CONTROL *ctl);
+void check_cycle_status(T_MOTOR_CONTROL *ctl);
 void accel_table_init(int32_t *array, uint32_t length, double acceleration, double alpha);
 static int32_t absolute(int32_t arg);
 
@@ -50,13 +45,52 @@ static int32_t absolute(int32_t arg);
 void STG_Init (void)
 {
 	// Calculate acceleration table which is held in RAM for making the ISR as short as possible
+	// needs to be done before initializing the individual motors
 	accel_table_init(c_table_z, C_TABLE_SIZE, Z_ACCEL_MAX, Z_ALPHA);
+	accel_table_init(c_table_xy, C_TABLE_SIZE, XY_ACCEL_MAX, XY_ALPHA);
 
-	// Init the individual motors
-	z_dae_init(&z_dae_motor, &z_dae_swap);
+	// Init X_DAE motor
+	x_dae_motor.motor.hw.flip_dir = X_DAE_HW_FLIP_DIR;
+	x_dae_motor.motor.hw.dir_port = X_DAE_HW_DIR_PORT;
+	x_dae_motor.motor.hw.dir_pin = X_DAE_HW_DIR_PIN;
+	x_dae_motor.motor.hw.timer = X_DAE_HW_TIMER;
+	x_dae_motor.motor.hw.CCMR = X_DAE_HW_CCMR;
+	x_dae_motor.motor.hw.channel = X_DAE_HW_CHANNEL;
+	x_dae_motor.motor.hw.oc_mask = X_DAE_HW_OC_MASK;
+	x_dae_motor.motor.hw.oc_active_mask = X_DAE_HW_OC_ACTIVE_MASK;
+	x_dae_motor.motor.hw.oc_inactive_mask = X_DAE_HW_OC_INACTIVE_MASK;
+	x_dae_motor.motor.hw.oc_forced_inactive_mask = X_DAE_HW_OC_FORCED_INACTIVE_MASK;
+	xy_type_init(&x_dae_motor);
+	HAL_TIM_OC_Start_IT(X_DAE_HW_TIMER, X_DAE_HW_CHANNEL); // Start timer channel for this motor
 
-	// Start timers
-	HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
+	// Init Y_DAE motor
+	y_dae_motor.motor.hw.flip_dir = Y_DAE_HW_FLIP_DIR;
+	y_dae_motor.motor.hw.dir_port = Y_DAE_HW_DIR_PORT;
+	y_dae_motor.motor.hw.dir_pin = Y_DAE_HW_DIR_PIN;
+	y_dae_motor.motor.hw.timer = Y_DAE_HW_TIMER;
+	y_dae_motor.motor.hw.CCMR = Y_DAE_HW_CCMR;
+	y_dae_motor.motor.hw.channel = Y_DAE_HW_CHANNEL;
+	y_dae_motor.motor.hw.oc_mask = Y_DAE_HW_OC_MASK;
+	y_dae_motor.motor.hw.oc_active_mask = Y_DAE_HW_OC_ACTIVE_MASK;
+	y_dae_motor.motor.hw.oc_inactive_mask = Y_DAE_HW_OC_INACTIVE_MASK;
+	y_dae_motor.motor.hw.oc_forced_inactive_mask = Y_DAE_HW_OC_FORCED_INACTIVE_MASK;
+	xy_type_init(&y_dae_motor);
+	HAL_TIM_OC_Start_IT(Y_DAE_HW_TIMER, Y_DAE_HW_CHANNEL); // Start timer channel for this motor
+
+	// Init Z_DAE motor
+	z_dae_motor.motor.hw.flip_dir = Z_DAE_HW_FLIP_DIR;
+	z_dae_motor.motor.hw.dir_port = Z_DAE_HW_DIR_PORT;
+	z_dae_motor.motor.hw.dir_pin = Z_DAE_HW_DIR_PIN;
+	z_dae_motor.motor.hw.timer = Z_DAE_HW_TIMER;
+	z_dae_motor.motor.hw.CCMR = Z_DAE_HW_CCMR;
+	z_dae_motor.motor.hw.channel = Z_DAE_HW_CHANNEL;
+	z_dae_motor.motor.hw.oc_mask = Z_DAE_HW_OC_MASK;
+	z_dae_motor.motor.hw.oc_active_mask = Z_DAE_HW_OC_ACTIVE_MASK;
+	z_dae_motor.motor.hw.oc_inactive_mask = Z_DAE_HW_OC_INACTIVE_MASK;
+	z_dae_motor.motor.hw.oc_forced_inactive_mask = Z_DAE_HW_OC_FORCED_INACTIVE_MASK;
+	z_type_init(&z_dae_motor);
+	HAL_TIM_OC_Start_IT(Z_DAE_HW_TIMER, Z_DAE_HW_CHANNEL); // Start timer channel for this motor
+
 }
 
 /** @brief 	Initializes a acceleration ramp table according to the desired acceleration, timer parameters and so on.
@@ -80,37 +114,69 @@ void accel_table_init(int32_t *array, uint32_t length, real acceleration, real a
 		array[i] = c_temp;
 	}
 
-	dbgprintf(" Step table output \n");
+	/*dbgprintf(" Step table output \n");
 	for (i = 0; i < length-1; i++)
 	{
 		dbgprintf("%d: %d", i, array[i]);
-	}
+	}*/
 }
 
-/** @brief 	Initialisation of motor state and ISR swap structure for Z-DAE-Axis
+/** @brief 	Initialisation function that is used for the x/y-axis.
  *
- *  @param (none)
+ * 			We need different functions for the z and the x/y axis
+ * 			because they have different accelerations.
+ *
+ *  @param  *ctl - pointer to motor control structure that should be initialized
  *  @return (none)
  */
-void z_dae_init(T_STEPPER_STATE* stat, T_ISR_CONTROL_SWAP *swap)
+void xy_type_init(T_MOTOR_CONTROL *ctl)
 {
-	// Z Axis on DAE strings
-	stat->pos = 0;
-	stat->acc = Z_ACCEL_MAX;
-	stat->w_max = Z_SPEED_MAX;
-	stat->alpha = Z_ALPHA;
-	stat->c_err = 0;
-	stat->overshoot_on = 0;
-	stat->overshoot_off = 0;
+	ctl->motor.pos = 0;
+	ctl->motor.acc = XY_ACCEL_MAX;
+	ctl->motor.w_max = XY_SPEED_MAX;
+	ctl->motor.alpha = XY_ALPHA;
+	ctl->motor.c_err = 0;
+	ctl->motor.overshoot_on = 0;
+	ctl->motor.overshoot_off = 0;
 
 	// Put pointers for c_table in place
-	z_dae_swap.z_dae_control[0].c_table = c_table_z;
-	z_dae_swap.z_dae_control[1].c_table = c_table_z;
+	ctl->ctl_swap[0].c_table = c_table_xy;
+	ctl->ctl_swap[1].c_table = c_table_xy;
 
-	// Initialize isr control swap stuff
-	swap->active = &stepper_shutoff;
-	swap->waiting = &(z_dae_swap.z_dae_control[0]);
-	swap->available = 0;
+	// Initialize ISR control swap stuff
+	ctl->active = &stepper_shutoff; // Motor is stopped at the beginning
+	ctl->waiting = &(ctl->ctl_swap[0]); // swap[0] is waiting to be filled.
+	ctl->available = 0;
+}
+
+/** @brief 	Initialisation function that is used for the z-axis.
+ * 			So it will be called once for the z-dae motor and once
+ * 			for the z-gda motor.
+ *
+ * 			We need different functions for the z and the x/y axis
+ * 			because they have different accelerations.
+ *
+ *  @param  *ctl - pointer to motor control structure that should be initialized
+ *  @return (none)
+ */
+void z_type_init(T_MOTOR_CONTROL *ctl)
+{
+	ctl->motor.pos = 0;
+	ctl->motor.acc = Z_ACCEL_MAX;
+	ctl->motor.w_max = Z_SPEED_MAX;
+	ctl->motor.alpha = Z_ALPHA;
+	ctl->motor.c_err = 0;
+	ctl->motor.overshoot_on = 0;
+	ctl->motor.overshoot_off = 0;
+
+	// Put pointers for c_table in place
+	ctl->ctl_swap[0].c_table = c_table_z;
+	ctl->ctl_swap[1].c_table = c_table_z;
+
+	// Initialize ISR control swap stuff
+	ctl->active = &stepper_shutoff; // Motor is stopped at the beginning
+	ctl->waiting = &(ctl->ctl_swap[0]); // swap[0] is waiting to be filled.
+	ctl->available = 0;
 }
 
 /** @brief 	Usually, the timer swaps its control struct by itself. But if it is the first command or
@@ -119,62 +185,70 @@ void z_dae_init(T_STEPPER_STATE* stat, T_ISR_CONTROL_SWAP *swap)
  * 			This function can also be called when a cycle is already in progress and should be restarted for some
  * 			reason. But be careful, it may perform an instant change in speed and therefore loose steps!
  *
- *  @param [in/out] *ctl - 	swap structure with both control structures
+ *  @param  *ctl - motor control structure for which the cycle should be started
  *  @return (none)
  */
-void STG_StartCycle(T_ISR_CONTROL_SWAP *ctl)
+void STG_StartCycle(T_MOTOR_CONTROL *ctl)
 {
 	uint16_t tim_preload;
 
-	// Z-DAE Axis
-	if(ctl == &z_dae_swap)
-	{
-		// First mute the output (The ISR activates it again by itself immediately)
-		htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
-		htim1.Instance->CCMR1 |= TIM_OCMODE_FORCED_INACTIVE;
+	// First mute the output (The ISR activates it again by itself immediately)
+	*(ctl->motor.hw.CCMR) &= ctl->motor.hw.oc_mask;
+	*(ctl->motor.hw.CCMR) |= ctl->motor.hw.oc_forced_inactive_mask;
 
-		// Initialize out_state so that it first waits the calculated time and does not generate an interrupt after pulsewidth
-		ctl->active->out_state = 0;
+	// Initialize out_state so that it first waits the calculated time and does not generate an interrupt after pulsewidth
+	ctl->active->out_state = 0;
 
-		// in case the cycle was already running, we reset it (should ususally not be necessary)
-		ctl->active->s = 0;
-		ctl->active->running = 1;
-		z_dae_motor.c_err = 0;
+	// in case the cycle was already running, we reset it (should usually not be necessary)
+	ctl->active->s = 0;
+	ctl->active->running = 1;
+	ctl->motor.c_err = 0;
 
-		// And finally offset the timer by 1, so that it starts at the next tick (which is statistically 0.5 intervals away).
-		tim_preload = __HAL_TIM_GET_COUNTER(&htim1) + 1;
-		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, tim_preload);
-	}
+	// And finally offset the timer by 1, so that it starts at the next tick (which is statistically 0.5 intervals away).
+	tim_preload = __HAL_TIM_GET_COUNTER(ctl->motor.hw.timer) + 1;
+	__HAL_TIM_SetCompare(ctl->motor.hw.timer, ctl->motor.hw.channel, tim_preload);
+
+}
+
+/** @brief 	Perfrom an immediate hard stop.
+ *
+ *  @param *ctl - Motor control struct to operate on.
+ *  @return (none)
+ */
+void STG_hardstop (T_MOTOR_CONTROL *ctl)
+{
+	ctl->active = &stepper_shutoff;
 }
 
 
 /** @brief 	Makes the waiting ISR control struct active and puts the other of the two
  * 			control structs in waiting. Whatever was in "active" before is thrown away.
  * 			(if e.g. stepper_shutoff was put here). It also sets shutoff to 0, which
- * 			is always set to 1 in a fre
+ * 			is always set to 1 in a fresh cycle
  *
- *  @param (none)
+ *  @param *ctl - Motor control struct to operate on.
  *  @return (none)
  */
-void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * ctl)
+void STG_swapISRcontrol (T_MOTOR_CONTROL *ctl)
 {
 	if (ctl->available == 1)
 	{
 
 		ctl->active = ctl->waiting;
-		if (ctl->active == &(ctl->z_dae_control[0]))
+		if (ctl->active == &(ctl->ctl_swap[0]))
 		{
-			ctl->waiting = &(ctl->z_dae_control[1]);
-
+			ctl->waiting = &(ctl->ctl_swap[1]);
 		}
 		else
 		{
-			ctl->waiting = &(ctl->z_dae_control[0]);
+			// Also if active is shutoff, the zero is waiting.
+			ctl->waiting = &(ctl->ctl_swap[0]);
 		}
 
 		if (ctl->active->shutoff == 1)
 		{
 			// Maybe something special to do with c_err here?
+			// This would be the place to do something for catchup.
 		}
 
 		ctl->active->running = 1;
@@ -199,89 +273,89 @@ void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * ctl)
  *
  * 			Simple table-based constant acceleration algorithm implemeted. No jerk-limitation yet.
  *
- *  @param [in/out] *ctl - 	control structure containing all the low level ISR setup paramters (c, n, s...)
+ *  @param  *ctl - 	control structure containing all the low level ISR setup paramters (c, n, s...)
  *  						some of those parameters are modified by this routine (e.g. n, c)
  *  @return timer preload (without FACTOR).
  */
-uint16_t step_calculations(T_ISR_CONTROL *ctl)
+uint16_t step_calculations(T_ISR_CONTROL *isr)
 {
 	int32_t c_temp;
-	if (ctl->s < ctl->s_on)
+	if (isr->s < isr->s_on)
 	{
-		if (ctl->s == 0)
+		if (isr->s == 0)
 		{
-			ctl->n = ctl->neq_on;
+			isr->n = isr->neq_on;
 		}
 
-		if (ctl->no_accel == 1)
+		if (isr->no_accel == 1)
 		{
-			c_temp = ctl->c_t;
+			c_temp = isr->c_t;
 		}
 		else
 		{
-			c_temp = ctl->c_table[absolute(ctl->n)];
+			c_temp = isr->c_table[absolute(isr->n)];
 		}
 
-		ctl->n++;
+		isr->n++;
 
 		// Overshoot protection
-		if ((c_temp - ctl->c_t)*(ctl->d_on) >= 0)
+		if ((c_temp - isr->c_t)*(isr->d_on) >= 0)
 		{
-			ctl->c = c_temp;
+			isr->c = c_temp;
 		}
 		else
 		{
 			// Count overshoot here for debug purposes
-			ctl->c = ctl->c_t;
-			ctl->overshoot_on++;
+			isr->c = isr->c_t;
+			isr->overshoot_on++;
 		}
 	}
-	else if (ctl->s >= ctl->s_off)
+	else if (isr->s >= isr->s_off)
 	{
-		if (ctl->s == ctl->s_off)
+		if (isr->s == isr->s_off)
 		{
-			ctl->n = ctl->neq_off;
+			isr->n = isr->neq_off;
 		}
 
-		if (ctl->no_accel == 1)
+		if (isr->no_accel == 1)
 		{
-			c_temp = ctl->c_t;
+			c_temp = isr->c_t;
 		}
 		else
 		{
-			c_temp = ctl->c_table[absolute(ctl->n)];
+			c_temp = isr->c_table[absolute(isr->n)];
 		}
 
-		ctl->n++;
+		isr->n++;
 
-		if ((ctl->c_t - c_temp)*(ctl->d_off) >= 0)
+		if ((isr->c_t - c_temp)*(isr->d_off) >= 0)
 		{
-			ctl->c = ctl->c_t;
-			ctl->c = c_temp;
+			isr->c = isr->c_t;
+			isr->c = c_temp;
 		}
 		else
 		{
 			// Count overshoot here for debug purposes
-			ctl->overshoot_off++;
+			isr->overshoot_off++;
 		}
 	}
 	else
 	{
 		// If neighter accel nor decel, just run along at target speed.
-		ctl->c = ctl->c_t;
+		isr->c = isr->c_t;
 	}
 
 	// set and return real hardware_count
-	ctl->c_hw = ctl->c / FACTOR;
+	isr->c_hw = isr->c / FACTOR;
 
 	// if c_hw is so large that it includes multiple rounds of the timer, it needs to be split in round count and rest.
-	ctl->c_hwr = (ctl->c_hw - STEP_PULSE_WIDTH) / C_MAX;
-	ctl->c_hwi = (ctl->c_hw - STEP_PULSE_WIDTH) % C_MAX;
+	isr->c_hwr = (isr->c_hw - STEP_PULSE_WIDTH) / C_MAX;
+	isr->c_hwi = (isr->c_hw - STEP_PULSE_WIDTH) % C_MAX;
 
 	// count the used up time to determine error
-	ctl->c_real += ctl->c_hw;
+	isr->c_real += isr->c_hw;
 
-	return ctl->c_hw;
+	return isr->c_hw;
 
 }
 
@@ -290,15 +364,15 @@ uint16_t step_calculations(T_ISR_CONTROL *ctl)
  *  @param [in/out] *ctl - 	swap structure with both control structures
  *  @return (none)
  */
-void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state)
+void check_cycle_status(T_MOTOR_CONTROL *ctl)
 {
 	// Did we finish this cycle?
 	if (ctl->active->s == ctl->active->s_total)
 	{
 		// Save the difference in timer ticks this cycle produced for information and possibly correction at some point.
-		state->c_err += ctl->active->c_real - ctl->active->c_ideal;
-		state->overshoot_on = ctl->active->overshoot_on;
-		state->overshoot_off = ctl->active->overshoot_off;
+		ctl->motor.c_err += ctl->active->c_real - ctl->active->c_ideal;
+		ctl->motor.overshoot_on = ctl->active->overshoot_on;
+		ctl->motor.overshoot_off = ctl->active->overshoot_off;
 
 		// Swap the buffers and start a new cycle
 		STG_swapISRcontrol(ctl);
@@ -306,133 +380,103 @@ void check_cycle_status(T_ISR_CONTROL_SWAP *ctl, T_STEPPER_STATE *state)
 
 }
 
-void tim1_cc_irq_handler (void)
+/** @brief Updates...
+ *
+ * 			timer
+ * 			channel
+ * 			output pi
+ *  @param [in/out] *ctl - 	swap structure with both control structures
+ *  @return (none)
+ */
+void isr_update_stg (T_MOTOR_CONTROL *ctl, uint16_t tim_cnt)
 {
-	// We make a local pointer for copy and paste purposes of the other axis.
-	T_ISR_CONTROL_SWAP *ctl;
-	T_STEPPER_STATE *state;
+	uint16_t 	preload = tim_cnt+1;
+	uint16_t	c_hw;
 
-	// Read out current timer state
-	tim1_cnt = __HAL_TIM_GET_COUNTER(&htim1);
+	// First check if the cycle is finished already. This is done only on the falling edge of the step pulse (save interrupt time)
+	if (ctl->active->out_state == 0 && ctl->active->c_hwr == 0  && ctl->active->running == 1
+			&& ctl->active->shutoff == 0)
+	{
+		// If yes, the swap is performed here, so from here on all ctl->active values changed!
+		check_cycle_status(ctl);
+	}
 
-	// Check if the interrupt was created by CC1, then its for Z_DAE axis
-	// ---------------------------------------------------------------------------------------
-	  if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC1) != RESET)
-	  {
-	    if (__HAL_TIM_GET_IT_SOURCE(&htim1, TIM_IT_CC1) != RESET)
-	    {
-	    	// Clear interrupt source, otherwise interrupt is permanently executed
-	    	__HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC1);
-	    	htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_1;
+	if (ctl->active->running == 1 && ctl->active->shutoff == 0)
+	{
+		if (ctl->active->out_state == 1)
+		{
+			// We've just generated a positive edge and moved the motor.
+			// So in a couple of us, we will reset the step line to 0. (second part of this if)
+			// Configure timer so the pin goes low at the next overflow
+			ctl->active->out_state = 0;
+			*(ctl->motor.hw.CCMR) &= ~(ctl->motor.hw.oc_mask);
+			*(ctl->motor.hw.CCMR) |= ctl->motor.hw.oc_inactive_mask;
+			// Intermediate step to generate small pulse
+			preload = tim_cnt + STEP_PULSE_WIDTH;
+			// now a step has been done
+			ctl->motor.pos += ctl->active->dir_abs;
+			// relative step counter is always positive
+			ctl->active->s++;
+		}
+		else if (ctl->active->out_state == 0)
+		{
+			// The step line is at 0 again. We need to calculate how long it takes to the next step.
+			if (ctl->active->c_hwr == 0)
+			{
+				// We've completed all subsequent full rounds of the timer and process the next step.
+				// Recalculate timer preload out of old or new control struct
+				c_hw = step_calculations(ctl->active);
+				debug_push_preload(c_hw); // we need to push the full preload, not every individual round.
 
-	    	// CCINT1 is used for Z_DAE_axis, so we switch the control and state structs to it
-	    	ctl = &z_dae_swap;
-	    	state = &z_dae_motor;
+				preload = tim_cnt + ctl->active->c_hwi; // the PULSE_WIDTH is included in the step calculation already.
 
-	    	// First check if the cycle is finished already. This is done only on the falling edge of the step pulse (save interrupt time)
-	    	if (ctl->active->out_state == 0 && ctl->active->c_hwr == 0  && ctl->active->running == 1
-	    			&& ctl->active->shutoff == 0)
-	    	{
-				// If yes, the swap is performed here, so from here on all ctl->active values changed!
-				check_cycle_status(ctl, state);
-	    	}
+				// generate an edge at the next match if no rounds left
+				if (ctl->active->c_hwr == 0)
+				{
+					ctl->active->out_state = 1;
+					*(ctl->motor.hw.CCMR) &= ~(ctl->motor.hw.oc_mask);
+					*(ctl->motor.hw.CCMR) |= ctl->motor.hw.oc_active_mask;
+				}
+			}
+			else if (ctl->active->c_hwr > 0)
+			{
+				// We've already waited the fraction of a round, but need to wait more full rounds.
+				preload = tim_cnt + C_MAX;
+				ctl->active->c_hwr--;
 
-	    	if (ctl->active->running == 1 && ctl->active->shutoff == 0)
-	    	{
-	    		if (ctl->active->out_state == 1)
-	    		{
-	    			// We've just generated a positive edge and moved the motor.
-	    			// So in a couple of us, we will reset the step line to 0. (second part of this if)
-	    			// Configure timer so the pin goes low at the next overflow
-	    			ctl->active->out_state = 0;
-	    			htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
-	    			htim1.Instance->CCMR1 |= TIM_OCMODE_INACTIVE;
-	    			// Intermediate step to generate small pulse
-	    			tim1_preload = tim1_cnt + STEP_PULSE_WIDTH;
-	    			// now a step has been done
-	    			state->pos += ctl->active->dir_abs;
-	    			// relative step counter is always positive
-	    			ctl->active->s++;
-	    		}
-	    		else if (ctl->active->out_state == 0)
-	    		{
+				// generate a tick at the next match if no rounds left
+				if (ctl->active->c_hwr == 0)
+				{
+					ctl->active->out_state = 1;
+					*(ctl->motor.hw.CCMR) &= ~(ctl->motor.hw.oc_mask);
+					*(ctl->motor.hw.CCMR) |= ctl->motor.hw.oc_active_mask;
+				}
+			}
+			else
+			{
+				// should never come here.
+				ctl->active->c_hwr = 0;
+			}
 
+			// Take care of direction pin.
+			switch(ctl->active->dir_abs * ctl->motor.hw.flip_dir)
+			{
+			case  1: HAL_GPIO_WritePin(ctl->motor.hw.dir_port, ctl->motor.hw.dir_pin, GPIO_PIN_SET); break;
+			case -1: HAL_GPIO_WritePin(ctl->motor.hw.dir_port, ctl->motor.hw.dir_pin, GPIO_PIN_RESET); break;
+			}
+		}
 
+		// Only preset compare reg if neccesary
+		__HAL_TIM_SetCompare(ctl->motor.hw.timer, ctl->motor.hw.channel, preload);
 
-	    			// The step line is at 0 again. We need to calculate how long it takes to the next step.
-	    			if (ctl->active->c_hwr == 0)
-	    			{
-	    				// We've completed all subsequent full rounds of the timer and process the next step.
-						// Recalculate timer preload out of old or new control struct
-						tim1_c_hw = step_calculations(ctl->active);
-						debug_push_preload(tim1_c_hw); // we need to push the full preload, not every individual round.
+	}
+	else
+	{
+		// Force off output, so that it does not randomly tick along
+		*(ctl->motor.hw.CCMR) &= ~(ctl->motor.hw.oc_mask);
+		*(ctl->motor.hw.CCMR) |= ctl->motor.hw.oc_forced_inactive_mask;
+	}
 
-						tim1_preload = tim1_cnt + ctl->active->c_hwi; // the PULSE_WIDTH is included in the step calculation already.
-
-						if (ctl->active->c_hwr == 0)
-						{
-							ctl->active->out_state = 1;
-							htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
-							htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
-						}
-	    			}
-	    			else if (ctl->active->c_hwr > 0)
-	    			{
-	    				// We've already waited the fraction of a round, but need to wait more full rounds.
-	    				tim1_preload = tim1_cnt + C_MAX;
-	    				ctl->active->c_hwr--;
-						if (ctl->active->c_hwr == 0)
-						{
-							ctl->active->out_state = 1;
-							htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
-							htim1.Instance->CCMR1 |= TIM_OCMODE_ACTIVE;
-						}
-	    			}
-
-	    			// Take care of direction pin.
-	    			switch(ctl->active->dir_abs * Z_DAE_FLIP_DIR)
-	    			{
-	    			case  1: HAL_GPIO_WritePin(Z_DAE_DIR_GPIO_Port, Z_DAE_DIR_Pin, GPIO_PIN_SET); break;
-	    			case -1: HAL_GPIO_WritePin(Z_DAE_DIR_GPIO_Port, Z_DAE_DIR_Pin, GPIO_PIN_RESET); break;
-	    			}
-	    		}
-
-	    		// Only preset compare reg if neccesary
-	    		__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, tim1_preload);
-
-	    	}
-	    	else
-	    	{
-	    		// Force off output, so that it does not randomly tick along
-	    		htim1.Instance->CCMR1 &= ~TIM_CCMR1_OC1M_Msk;
-	    		htim1.Instance->CCMR1 |= TIM_OCMODE_FORCED_INACTIVE;
-	    	}
-	    }
-	  }
-
-	  // Check if the interrupt was created by CC2
-	  // ---------------------------------------------------------------------------------------
-	  if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC2) != RESET)
-	  {
-		  if (__HAL_TIM_GET_IT_SOURCE(&htim1, TIM_IT_CC2) != RESET)
-		  {
-		        __HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC2);
-		        htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_2;
-
-		  }
-	  }
-
-	  // Check if the interrupt was created by CC3
-	  // ---------------------------------------------------------------------------------------
-	  if (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC3) != RESET)
-	  {
-		  if (__HAL_TIM_GET_IT_SOURCE(&htim1, TIM_IT_CC3) != RESET)
-		  {
-		        __HAL_TIM_CLEAR_IT(&htim1, TIM_IT_CC3);
-		        htim1.Channel = HAL_TIM_ACTIVE_CHANNEL_3;
-
-		  }
-	  }
 }
 
 /** @brief If argument is negative, this function returns -argument. Absolute.

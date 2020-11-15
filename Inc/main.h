@@ -80,6 +80,10 @@ void Error_Handler(void);
 #define RMII_RXD0_GPIO_Port GPIOC
 #define RMII_RXD1_Pin GPIO_PIN_5
 #define RMII_RXD1_GPIO_Port GPIOC
+#define CPU_LOAD_Pin GPIO_PIN_1
+#define CPU_LOAD_GPIO_Port GPIOB
+#define ISR_LOAD_Pin GPIO_PIN_13
+#define ISR_LOAD_GPIO_Port GPIOF
 #define ENA_DAE_Pin GPIO_PIN_7
 #define ENA_DAE_GPIO_Port GPIOE
 #define X_DAE_DIR_Pin GPIO_PIN_8
@@ -106,8 +110,6 @@ void Error_Handler(void);
 #define LIMIT_Y_DAE_GPIO_Port GPIOD
 #define LIMIT_Z_DAE_Pin GPIO_PIN_12
 #define LIMIT_Z_DAE_GPIO_Port GPIOD
-#define CPU_LOAD_Pin GPIO_PIN_5
-#define CPU_LOAD_GPIO_Port GPIOG
 #define USB_PowerSwitchOn_Pin GPIO_PIN_6
 #define USB_PowerSwitchOn_GPIO_Port GPIOG
 #define USB_OverCurrent_Pin GPIO_PIN_7

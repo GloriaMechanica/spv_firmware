@@ -14,20 +14,36 @@
 #define F_TIMER			8000000				// Motor timer frequency. currently 1MHz.
 #define C_MAX			65536				// 16 bit timer -> one revolution is 2^16 = 65536 ticks.
 
+typedef struct
+{
+	int32_t			flip_dir;		// A final switch to reverse motor direction
+	GPIO_TypeDef* 	dir_port; 		// GPIO port where dir pin is (e.g. Z_DAE_DIR_GPIO_Port)
+	uint16_t 		dir_pin;  		// GPIO number of dir pin (e.g. Z_DAE_DIR_Pin)
+	TIM_HandleTypeDef *timer; 		// timer which this motor uses
+	uint32_t		channel;		// to save the mask of the channel that this motor is connected to
+	uint32_t		*CCMR; 			// Capture control register (CCMR1 or CCMR2)
+	uint32_t		oc_mask; 		// to save the output compare mask for this channel
+	uint32_t		oc_active_mask; // The three masks needed to set the compare mode of the step pin.
+	uint32_t		oc_inactive_mask;
+	uint32_t 		oc_forced_inactive_mask;
+}T_MOTOR_HW;
+
 // Contains motor parameters which are not dependent on the current cycle
 typedef struct
 {
 	// General motor data
-	int32_t 	pos; 			// Absolute motor position, relative to end stop [in steps]
-	float		acc; 			// Maximum allowed acceleration/deceleration [rad^2/sec]
-	float 		w_max; 			// maximal allowed motor speed [rad/sec]
-	float 		alpha; 			// Rotor angle per step [rad]
-	int32_t		c_err; 			// Difference in actual and relative timer ticks (for correction)
-	int32_t 	overshoot_on; 	// Keeps overshoot-ticks from last cycle to be extracted when calculating the next cycle
-	int32_t		overshoot_off; 	// same.
+	int32_t 		pos; 			// Absolute motor position, relative to end stop [in steps]
+	float			acc; 			// Maximum allowed acceleration/deceleration [rad^2/sec]
+	float 			w_max; 			// maximal allowed motor speed [rad/sec]
+	float 			alpha; 			// Rotor angle per step [rad]
+	int32_t			c_err; 			// Difference in actual and relative timer ticks (for correction)
+	int32_t 		overshoot_on; 	// Tracks how many ticks the overshoot-protection was active (for debug)
+	int32_t			overshoot_off; 	// same, but not for the acceleration overshoot, but for deceleration overshoot
+	T_MOTOR_HW		hw;				// contains the mapping of this motor to the hardware (pins, timer registers ...)
 } T_STEPPER_STATE;
 
 // Contains information for ISR Setup of one cycle
+// Each motor has two of those, one is actively executed in the ISR, while the other one is being prepared
 typedef struct
 {	int32_t		c;				// ISR Timer preload (contains FACTOR!) [in timer ticks * FACTOR]
 	int32_t 	c_t; 			// Target speed preload value [in timer ticks * FACTOR]
@@ -55,24 +71,28 @@ typedef struct
 	int32_t		overshoot_off; 	// Counter for how much overshoot was done when approaching passover speed
 } T_ISR_CONTROL;
 
+// One of these for every motor. Contains all the information for this particular motor
 typedef struct
 {
-	T_ISR_CONTROL 	z_dae_control[2]; // This is the memory allocation for active and waiting structs. In active and waiting, there are the pointers of those two
+	T_STEPPER_STATE	motor;
+	T_ISR_CONTROL 	ctl_swap[2]; // This is the memory allocation for active and waiting structs. In active and waiting, there are the pointers of those two
 	T_ISR_CONTROL* 	active;
 	T_ISR_CONTROL* 	waiting;
 	int32_t			available; 	// Gets set to 1 if the waiting control struct has been updated and is ready to use in the next cycle
-}T_ISR_CONTROL_SWAP;
+	int32_t			cycle_in_execution; // reads 1 of the motor is currently self-following a trajectory. If it is paused, it reads 0.
+}T_MOTOR_CONTROL;
 
 // Global stepper state variables
-T_ISR_CONTROL stepper_shutoff;
-T_STEPPER_STATE	z_dae_motor;
-T_ISR_CONTROL_SWAP z_dae_swap;
+T_ISR_CONTROL stepper_shutoff; // to map into other motor control structs to turn it off.
+T_MOTOR_CONTROL x_dae_motor;
+T_MOTOR_CONTROL y_dae_motor;
+T_MOTOR_CONTROL z_dae_motor;
 
 // PROTOTYPES
-void tim1_cc_irq_handler (void);
+void isr_update_stg (T_MOTOR_CONTROL *ctl, uint16_t tim_cnt);
 void STG_Init (void);
-void STG_swapISRcontrol (T_ISR_CONTROL_SWAP * isr_control);
-void STG_StartCycle(T_ISR_CONTROL_SWAP *ctl);
+void STG_swapISRcontrol (T_MOTOR_CONTROL *ctl);
+void STG_StartCycle(T_MOTOR_CONTROL *ctl);
 
 
 

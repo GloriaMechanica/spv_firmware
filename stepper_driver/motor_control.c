@@ -21,7 +21,7 @@ int32_t cycle_number;
 
 
 // PROTOTYPES
-real calculate_motor_control (T_SPT_CYCLESPEC *setup,  T_STEPPER_STATE *motor, T_ISR_CONTROL_SWAP *ctl);
+real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl);
 real min (real a, real b);
 real max (real a, real b);
 
@@ -65,19 +65,28 @@ void SM_restart_testcylce (void)
 
 	// Just for test purposes kick it off
 	SM_updateMotorControl();
-	STG_swapISRcontrol(&z_dae_swap);
-	STG_StartCycle(&z_dae_swap);
+	STG_swapISRcontrol(&z_dae_motor);
+	STG_StartCycle(&z_dae_motor);
 
 }
 
+/** @brief  Immediately shuts the motor off.
+ *  @param 	(none)
+ *  @return (none)
+ */
+void SM_hardstop (void)
+{
+
+}
 
 /** @brief  Needs to be called periodically by the main program. (ideally less than 1ms rhythm)
+ *    		CURRENTLY JUST A DEMO THING!
  *  @param 	(none)
  *  @return (none)
  */
 int32_t SM_updateMotorControl(void)
 {
-	if (z_dae_swap.available == 0 && cycle_number < TEST_POINTS - 2)
+	if (z_dae_motor.available == 0 && cycle_number < TEST_POINTS - 2)
 	{
 		T_SPT_CYCLESPEC setup;
 		setup.delta_s0 = test_positions[cycle_number + 1] - test_positions[cycle_number]; // steps
@@ -86,29 +95,28 @@ int32_t SM_updateMotorControl(void)
 		setup.delta_t1 = test_times[cycle_number + 2] - test_times[cycle_number + 1];
 		setup.w_s = w_old;
 		dbgprintf("Z Motor calculations: ");
-		w_old = calculate_motor_control(&setup, &z_dae_motor,  &z_dae_swap);
+		w_old = calculate_motor_control(&setup, &z_dae_motor);
 		// Mark that new values have been put in place.
-		z_dae_swap.available = 1;
+		z_dae_motor.available = 1;
 		cycle_number++;
 	}
 	return cycle_number;
 }
 
-/** @brief 	If the stepper ISR is done with one cycle and switched to the waiting one, this function has
- * 			to calculate the next waiting one.
+/** @brief 	Prepares the next waiting struct according to the cycle setup
+ * 			must not be given cycles with a cycle with t=0 which is impossible
  *
- *
- * 			chatch t=0 exceptions
- *
- *  @param (many)
+ *  @param *setup - steps over time for this and for the next cycle, plus start speed
+ *  @param *ctl - pointer to motor handle. Here it finds the waitin struct.
  *  @return calculated passover speed (which is start speed of the next cycle's calculation
  */
-real calculate_motor_control (T_SPT_CYCLESPEC *setup,  T_STEPPER_STATE *motor, T_ISR_CONTROL_SWAP *ctl)
+real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 {
 	// General variables
 	//real	t_t;				// Timer tick period (in seconds)
-	real 	alpha = motor->alpha; // Just for shorter writing in formulas
-	real 	acc = motor->acc; 	// Same here ^
+	real 	alpha = ctl->motor.alpha; // Just for shorter writing in formulas
+	real 	acc = ctl->motor.acc; 	// Same here ^
+	real 	w_max = ctl->motor.w_max;
 	int32_t i; 					// Loop counters
 	int32_t runs = N_APPROX;	// Number of iteration steps. This values is altered if a slow cycle is detected.
 
@@ -161,8 +169,8 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup,  T_STEPPER_STATE *motor, T
 
 	// Information of last cycle (how it performed during execution)
 	dbgprintf(" --------- Information from last completed -----------------");
-	dbgprintf("Timing error: %f ms (%d ticks)", (real) motor->c_err * 1000 / F_TIMER, motor->c_err);
-	dbgprintf("Overshoot on: %d Overshoot off: %d", motor->overshoot_on, motor->overshoot_off);
+	dbgprintf("Timing error: %f ms (%d ticks)", (real) ctl->motor.c_err * 1000 / F_TIMER, ctl->motor.c_err);
+	dbgprintf("Overshoot on: %d Overshoot off: %d", ctl->motor.overshoot_on, ctl->motor.overshoot_off);
 
 
 	// ------------ start calculations ------------------------------------
@@ -218,8 +226,8 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup,  T_STEPPER_STATE *motor, T
 	}
 
 	// All calculations of speeds etc. are done in radiant. So we need to convert steps to radiant
-	delta_theta0 = delta_s0 * motor->alpha;
-	delta_theta1 = delta_s1 * motor->alpha;
+	delta_theta0 = delta_s0 * alpha;
+	delta_theta1 = delta_s1 * alpha;
 
 	// Mean speeds of cycles are base for some decisions
 	w_mean0 = (real) delta_theta0 / delta_t0;
@@ -381,7 +389,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup,  T_STEPPER_STATE *motor, T
 
 	for (i = 0; i < runs; i++)
 	{
-		if (((w_t0[i] >= 0) && (w_t0[i] < motor->w_max) && (w_t1[i] >= 0) && (w_t1[i] < motor->w_max) && (w_diff[i] < w_min)) || slow0)
+		if (((w_t0[i] >= 0) && (w_t0[i] < w_max) && (w_t1[i] >= 0) && (w_t1[i] < w_max) && (w_diff[i] < w_min)) || slow0)
 		{
 			// Its better than the previous, so we take it
 			w_min = w_diff[i];
@@ -395,7 +403,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup,  T_STEPPER_STATE *motor, T
 	}
 
 	// Correction of acceleration, if it changed during calculation. This can happen sometimes, and dw_m needs to be updated.
-	// It should not be neccessary to update d_m_f here, but by rewriting it again we assure that they always match in direction
+	// It should not be necessary to update d_m_f here, but by rewriting it again we assure that they always match in direction
 	if (w_t0_f > w_t1_f)
 	{
 		dw_m = -acc;
@@ -416,7 +424,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup,  T_STEPPER_STATE *motor, T
 		w_m_f = w_t0_f;
 	}
 
-	if (w_t0_f < motor->w_max)
+	if (w_t0_f < w_max)
 	{
 		dbgprintf("Found ideal w_m = %f, w_t0 = %f, w_t1 = %f", w_m_f, w_t0_f, w_t1_f);
 	}
@@ -429,7 +437,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup,  T_STEPPER_STATE *motor, T
 
 	// Post processing all values for setting up the ISR struct
 	// c is set by ISR
-	ctl->waiting->c_t = motor->alpha/(w_t0_f / F_TIMER) * FACTOR;
+	ctl->waiting->c_t = alpha/(w_t0_f / F_TIMER) * FACTOR;
 	// c_hw is set by ISR
 	ctl->waiting->c_ideal = delta_t0 * F_TIMER;
 	ctl->waiting->c_real = 0;
@@ -437,11 +445,11 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup,  T_STEPPER_STATE *motor, T
 
 	ctl->waiting->s = 0;
 	ctl->waiting->s_total = delta_s0;
-	ctl->waiting->s_on = (w_t0_f*w_t0_f - w_s*w_s)/(2*motor->alpha*dw_s) + S_EXTRA;
-	ctl->waiting->s_off = (delta_s0) - (w_m_f*w_m_f - w_t0_f*w_t0_f)/(2*motor->alpha*dw_m);
+	ctl->waiting->s_on = (w_t0_f*w_t0_f - w_s*w_s)/(2*alpha*dw_s) + S_EXTRA;
+	ctl->waiting->s_off = (delta_s0) - (w_m_f*w_m_f - w_t0_f*w_t0_f)/(2*alpha*dw_m);
 	// n is set by ISR
-	ctl->waiting->neq_on = w_s*w_s/(2*motor->alpha*dw_s);
-	ctl->waiting->neq_off = w_t0_f*w_t0_f/(2*motor->alpha*dw_m);
+	ctl->waiting->neq_on = w_s*w_s/(2*alpha*dw_s);
+	ctl->waiting->neq_off = w_t0_f*w_t0_f/(2*alpha*dw_m);
 	ctl->waiting->shutoff = 0; // unless its a 0-cycle
 	ctl->waiting->running = 0; // Cycle is not activated yet
 	ctl->waiting->no_accel = slow0;

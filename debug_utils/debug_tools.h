@@ -13,6 +13,8 @@ void toggle_debug_led (void);
 
 void cpu_load_pin_on (void);
 void cpu_load_pin_off (void);
+void isr_load_pin_on (void);
+void isr_load_pin_off (void);
 
 void debug_start_motor_tracking (void);
 void debug_stop_motor_tracking (void);
