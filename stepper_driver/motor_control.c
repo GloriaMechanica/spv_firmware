@@ -8,16 +8,17 @@
 
 #include "main.h"
 #include "debug_tools.h"
-#include "step_generation.h"
 #include "motor_control.h"
+#include "timekeeper.h"
 #include <math.h>
 
 // Debug-only stuff
-int32_t test_positions[TEST_POINTS] = {0, 	1000, 	2000, 	3100, 	500, 	10000, 	0, 		0, 		0};
-int32_t test_times[TEST_POINTS] = 	  {0, 	300, 	700, 	1200, 	1800, 	2800, 	3800, 	4000, 	4500};
-real w_old;
-
-int32_t cycle_number;
+int32_t test_positions_xy[TEST_POINTS] = {0, 	500, 	500, 	1550, 	250, 	2000, 	0, 		100, 		0};
+int32_t test_times_xy[TEST_POINTS] = 	  {0, 	300, 	700, 	1200, 	1800, 	2300, 	2800, 	2900, 	3000};
+int32_t test_positions_z[TEST_POINTS] = {0, 	1000, 	2000, 	3100, 	500, 	10000, 	0, 		400, 		0};
+int32_t test_times_z[TEST_POINTS] = 	  {0, 	300, 	700, 	1200, 	1800, 	2800, 	3800, 	4000, 	4500};
+real w_old_x, w_old_y, w_old_z;
+int32_t cycle_number_x, cycle_number_y, cycle_number_z;
 
 
 // PROTOTYPES
@@ -57,17 +58,40 @@ void SM_Init (void)
 	STG_Init();
 }
 
+/*
+ * Just for debugging
+ */
 void SM_restart_testcylce (void)
 {
-	// Just for debug
-	cycle_number = 0;
-	w_old = 0;
+	int i;
+	T_DTP_MOTOR datapoint;
 
-	// Just for test purposes kick it off
-	SM_updateMotorControl();
-	STG_swapISRcontrol(&z_dae_motor);
-	STG_StartCycle(&z_dae_motor);
+	TK_stopTimer();
+	CHA_clearBuffer(&cha_posx_dae);
+	CHA_clearBuffer(&cha_posy_dae);
+	CHA_clearBuffer(&cha_str_dae);
 
+	// Push some events in the queue
+	for (i = 0; i < TEST_POINTS; i++)
+	{
+		datapoint.steps = test_positions_xy[i];
+		datapoint.timestamp = test_times_xy[i];
+		CHA_pushDatapoints(&cha_posx_dae, (void*) &datapoint, 1);
+		CHA_pushDatapoints(&cha_posy_dae, (void*) &datapoint, 1);
+	}
+
+
+	// Push some events in the queue
+	for (i = 0; i < TEST_POINTS; i++)
+	{
+		datapoint.steps = test_positions_z[i];
+		datapoint.timestamp = test_times_z[i];
+		CHA_pushDatapoints(&cha_str_dae, (void*) &datapoint, 1);
+	}
+
+	TK_setSystime(0);
+	dbgprintf(" RESTART testcycle at t=%d", TK_getSystime());
+	TK_startTimer();
 }
 
 /** @brief  Immediately shuts the motor off.
@@ -79,28 +103,128 @@ void SM_hardstop (void)
 
 }
 
-/** @brief  Needs to be called periodically by the main program. (ideally less than 1ms rhythm)
- *    		CURRENTLY JUST A DEMO THING!
+/** @brief  Call when time reached the timestamp of the first element in the channel buffer
  *  @param 	(none)
  *  @return (none)
  */
-int32_t SM_updateMotorControl(void)
+void SM_setMotorReady (T_MOTOR_CONTROL *ctl)
 {
-	if (z_dae_motor.available == 0 && cycle_number < TEST_POINTS - 2)
+	ctl->status = STG_READY;
+}
+
+
+/** @brief	Should be called periodically in the main loop for each motor.
+ *
+ * 			Executes the difference in time/position between the first two
+ * 			elements in a channel if the status of the motor indicates to
+ * 			do so.
+ *
+ * 			When the time reaches the timestamp of the execution, status
+ * 			STG_READY should be set and this thing will start the exection
+ *
+ * 			When the step generator requires a new cycle to be calculated in
+ * 			an ongoing trajectory, it will set STG_NOT_PREPARED and this
+ * 			function will calculate the next waiting cycle.
+ *
+ * 			It
+ *  @param 	*ctl - pointer to motor control structure
+ *  @param 	*cha - pointer to channel handle assigned to this motor.
+ *  @return returns -2 if channel is empty, -1 if this was the last entry in the channel.
+ */
+int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha)
+{
+	T_SPT_CYCLESPEC setup;
+	T_DTP_MOTOR datapoint[3];
+	int32_t points_available;
+	int32_t ret = 0;
+	real w_ret = 0.0;
+
+	// Only do something if a cycle is currently executed and needs refilling or if a new trajectory should be started
+	if (ctl->status == STG_READY || ctl->status == STG_NOT_PREPARED)
 	{
-		T_SPT_CYCLESPEC setup;
-		setup.delta_s0 = test_positions[cycle_number + 1] - test_positions[cycle_number]; // steps
-		setup.delta_t0 = test_times[cycle_number + 1] - test_times[cycle_number]; // ms
-		setup.delta_s1 = test_positions[cycle_number + 2] - test_positions[cycle_number + 1];
-		setup.delta_t1 = test_times[cycle_number + 2] - test_times[cycle_number + 1];
-		setup.w_s = w_old;
-		dbgprintf("Z Motor calculations: ");
-		w_old = calculate_motor_control(&setup, &z_dae_motor);
-		// Mark that new values have been put in place.
-		z_dae_motor.available = 1;
-		cycle_number++;
+		// Depending on how many datapoints are available, we pop one and read two more, or we
+		// pop one, read, whats there and fill the rest up with zero-cycles (you always need something
+		// pass to the motor_calculations function.
+		points_available = CHA_getNumberDatapoint(cha);
+		if (points_available >=3)
+		{
+			CHA_popDatapoints(cha, (void*) &(datapoint[0]),1);
+			CHA_readDatapoints(cha, (void*) &(datapoint[1]), 2); // get two new datapoints without deleting. One is where we need to be next, and one is to optimize the speed when we are at the next.
+		}
+		else if (points_available == 2)
+		{
+			// Add one zero-cylce at the end
+			CHA_popDatapoints(cha, (void*) &(datapoint[0]),1);
+			CHA_readDatapoints(cha, (void*) &(datapoint[1]), 1);
+			datapoint[2].timestamp = datapoint[1].timestamp + 100;
+			datapoint[2].steps = datapoint[1].steps;
+		}
+		else if (points_available == 1)
+		{
+			// Add two zero-cylces at the end
+			CHA_popDatapoints(cha, (void*) &(datapoint[0]),1);
+			datapoint[1].timestamp = datapoint[0].timestamp + 100;
+			datapoint[1].steps = datapoint[0].steps;
+			datapoint[2].timestamp = datapoint[1].timestamp + 100;
+			datapoint[2].steps = datapoint[1].steps;
+			dbgprintf("Last point for motor %s", ctl->name);
+			ret = -1;
+		}
+		else if (points_available == 0)
+		{
+			// No more datapoints available -> we are sitting on the last datapoint. End of the song.
+			// (Or the buffer filling was lazy and did not catch up, but this must never happen).
+			// TODO: What to do now?
+			dbgprintf("Ran out of data for motor %s", ctl->name);
+			return -2;
+		}
+
+		// And extract the difference between datapoints and pass them over to the motor calculator
+		setup.delta_s0 = datapoint[1].steps - datapoint[0].steps; // where we need to be minus where we are
+		setup.delta_t0 = datapoint[1].timestamp - datapoint[0].timestamp;
+		setup.delta_s1 = datapoint[2].steps - datapoint[1].steps;
+		setup.delta_t1 = datapoint[2].timestamp - datapoint[1].timestamp;
+
+		if (ctl->status == STG_READY)
+		{
+			// This is a new self-following trajectory to start. The motor has not been moving previously
+			setup.w_s = 0; // this is the start of a new trajectory, so start speed is 0
+			dbgprintf("%s Start trajectory of at t=%d: ", ctl->name, TK_getSystime());
+			w_ret = calculate_motor_control(&setup, ctl);
+			if (w_ret == W_ERR)
+			{
+				// Could not fit the motion request
+				ctl->status = STG_ERROR;
+				dbgprintf("%s CALCULATION ERROR!", ctl->name);
+			}
+			else
+			{
+				ctl->status = STG_PREPARED;
+				STG_StartCycle(ctl);
+			}
+
+		}
+		else if (ctl->status == STG_NOT_PREPARED)
+		{
+			// This is a point in a trajectory and not a new one.
+			setup.w_s = ctl->active->w_finish; // set the start of this waiting cycle to the finishing speed of the currently active one
+			dbgprintf("%s continue trajectory at t=%d: ", ctl->name, TK_getSystime());
+			w_ret = calculate_motor_control(&setup, ctl);
+			if (w_ret == W_ERR)
+			{
+				// Could not fit the motion request
+				ctl->status = STG_ERROR;
+				dbgprintf("%s CALCULATION ERROR!", ctl->name);
+			}
+			else
+			{
+				ctl->status = STG_PREPARED;
+			}
+			// Does not have to be started because the ISR will swap the waiting struct in at the right time itself
+		}
 	}
-	return cycle_number;
+
+	return ret;
 }
 
 /** @brief 	Prepares the next waiting struct according to the cycle setup
@@ -163,30 +287,35 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 	int32_t d_m_f; 				// Final mid acceleration direction (-1 or 1)
 	//int32_t d_e_f; 				// Final end acceleration direction (-1 or 1)
 
+	// TODO: do this properly
+	int dbp=0;
+	if (ctl == &x_dae_motor)
+		dbp = 1;
+
 	// Equivalent acceleration indices
 	int32_t	neq_mean0;
 	int32_t neq_mean1;
 
 	// Information of last cycle (how it performed during execution)
-	dbgprintf(" --------- Information from last completed -----------------");
-	dbgprintf("Timing error: %f ms (%d ticks)", (real) ctl->motor.c_err * 1000 / F_TIMER, ctl->motor.c_err);
-	dbgprintf("Overshoot on: %d Overshoot off: %d", ctl->motor.overshoot_on, ctl->motor.overshoot_off);
+	dbgprintfc(dbp, " --------- Information from last completed -----------------");
+	dbgprintfc(dbp, "Timing error: %f ms (%d ticks)", (real) ctl->motor.c_err * 1000 / F_TIMER, ctl->motor.c_err);
+	dbgprintfc(dbp, "Overshoot on: %d Overshoot off: %d", ctl->motor.overshoot_on, ctl->motor.overshoot_off);
 
 
 	// ------------ start calculations ------------------------------------
-	dbgprintf(" --------- Start motor control calculations -------");
+	dbgprintfc(dbp, " --------- Start motor control calculations for %s -------", ctl->name);
 
 
 	// Print out input parameters for test purposes
-	dbgprintf("delta_s0: %d steps  in   delta_t0: %d ms", setup->delta_s0, setup->delta_t0);
-	dbgprintf("delta_s1: %d steps  in   delta_t1: %d ms", setup->delta_s1, setup->delta_t1);
-	dbgprintf("start speed: %f rad/s", setup->w_s);
+	dbgprintfc(1, "delta_s0: %d steps  in   delta_t0: %d ms", setup->delta_s0, setup->delta_t0);
+	dbgprintfc(1, "delta_s1: %d steps  in   delta_t1: %d ms", setup->delta_s1, setup->delta_t1);
+	dbgprintfc(dbp, "start speed: %f rad/s", setup->w_s);
 
 	// First, decide some important things. Are all inputs valid?
 	if (delta_t0 < 0 || delta_t1 < 0)
 	{
 		// negative times are crap. Stop stepper and report error
-		dbgprintf("Input error: negative times");
+		dbgprintfc(dbp, "Input error: negative times");
 		ctl->waiting = &stepper_shutoff;
 		return 0;
 	}
@@ -195,7 +324,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 	if (delta_s0 == 0)
 	{
 		// This is a zero-cycle. No need for further calculation of anything.
-		dbgprintf("Detected zero-cycle. Motor-control stop.");
+		dbgprintfc(1, "%s Detected zero-cycle. Motor-control stop.", ctl->name);
 		ctl->waiting = &stepper_shutoff;
 		return 0; // Passover speed after a stop-cycle is 0
 
@@ -279,13 +408,13 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 		{
 			dw_s = -acc;
 			d_s[i] = -1;
-			dbgprintf("Start down");
+			dbgprintfc(dbp, "Start down");
 		}
 		else
 		{
 			dw_s = acc;
 			d_s[i] = 1;
-			dbgprintf("Start up");
+			dbgprintfc(dbp, "Start up");
 		}
 
 		// chose right direction for mid acceleration (passover)
@@ -293,13 +422,13 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 		{
 			dw_m = -acc;
 			d_m[i] = -1;
-			dbgprintf("Middle down");
+			dbgprintfc(dbp, "Middle down");
 		}
 		else
 		{
 			dw_m = acc;
 			d_m[i] = 1;
-			dbgprintf("Middle up");
+			dbgprintfc(dbp, "Middle up");
 		}
 
 		// Its always end up for now, because it is not used later anyways.
@@ -322,12 +451,12 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 			if (-R_ERR < b0 && b0 < R_ERR) // Means b0 == 0
 			{
 				// Speed cannot be calculated
-				dbgprintf("ERROR: Linear 0 (loop %d)", i);
+				dbgprintfc(dbp, "ERROR: Linear 0 (loop %d)", i);
 				return W_ERR;
 			}
 			else
 			{
-				dbgprintf("Linear 0 ok");
+				dbgprintfc(dbp, "Linear 0 ok");
 				w_t0[i] = -c0/b0;
 			}
 		}
@@ -336,12 +465,12 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 			disk0 = b0*b0-4*a0*c0;
 			if (disk0 > 0)
 			{
-				dbgprintf("Root 0 ok");
+				dbgprintfc(dbp, "Root 0 ok");
 				w_t0[i] = (-b0 + sqrt(disk0))/(2*a0);
 			}
 			else
 			{
-				dbgprintf("ERROR: Root 0 (loop %d)", i);
+				dbgprintfc(dbp, "ERROR: Root 0 (loop %d)", i);
 				return W_ERR;
 			}
 		}
@@ -352,12 +481,12 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 			if (-R_ERR < b1 && b1 < R_ERR) // Means b0 == 0
 			{
 				// Speed cannot be calculated
-				dbgprintf("ERROR: Linear 1 (loop %d)", i);
+				dbgprintfc(dbp, "ERROR: Linear 1 (loop %d)", i);
 				return W_ERR;
 			}
 			else
 			{
-				dbgprintf("Linear 1 ok");
+				dbgprintfc(dbp, "Linear 1 ok");
 				w_t1[i] = -c1/b1;
 			}
 		}
@@ -366,12 +495,12 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 			disk1 = b1*b1-4*a1*c1;
 			if (disk1 > 0)
 			{
-				dbgprintf("Root 1 ok");
+				dbgprintfc(dbp, "Root 1 ok");
 				w_t1[i] = (-b1 + sqrt(disk1))/(2*a1);
 			}
 			else
 			{
-				dbgprintf("ERROR: Root 1 (loop %d)", i);
+				dbgprintfc(dbp, "ERROR: Root 1 (loop %d)", i);
 				return W_ERR;
 			}
 		}
@@ -426,11 +555,11 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 
 	if (w_t0_f < w_max)
 	{
-		dbgprintf("Found ideal w_m = %f, w_t0 = %f, w_t1 = %f", w_m_f, w_t0_f, w_t1_f);
+		dbgprintfc(dbp, "Found ideal w_m = %f, w_t0 = %f, w_t1 = %f", w_m_f, w_t0_f, w_t1_f);
 	}
 	else
 	{
-		dbgprintf("ERROR: Found nothing possible! (w_m = %f)", w_m_f);
+		dbgprintfc(dbp, "ERROR: Found nothing possible! (w_m = %f)", w_m_f);
 		ctl->waiting = &stepper_shutoff;
 		return 0;
 	}
@@ -457,6 +586,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 	ctl->waiting->dir_abs = dir_abs;
 	ctl->waiting->d_on = d_s_f;
 	ctl->waiting->d_off = d_m_f;
+	ctl->waiting->w_finish = w_m_f; // important to indicate the speed at which this cycle will finish (for calc of next cycle)
 
 	// Special treatment for slow speeds (the above calculations may be off by 1, this might make problems in the ISR)
 	if (slow0 == 1)
@@ -467,13 +597,13 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 		ctl->waiting->s_off = delta_s0;
 	}
 
-	dbgprintf("s_total: %d s_on: %d s_off: %d", ctl->waiting->s_total, ctl->waiting->s_on, ctl->waiting->s_off);
-	dbgprintf("neq_on: %d neq_off: %d ", ctl->waiting->neq_on, ctl->waiting->neq_off);
-	dbgprintf("c_t: %d", ctl->waiting->c_t);
-	dbgprintf("d_on: %d d_off: %d", ctl->waiting->d_on, ctl->waiting->d_off);
-	dbgprintf("dir_abs: %d slow: %d", ctl->waiting->dir_abs, ctl->waiting->no_accel);
+	dbgprintfc(dbp, "s_total: %d s_on: %d s_off: %d", ctl->waiting->s_total, ctl->waiting->s_on, ctl->waiting->s_off);
+	dbgprintfc(dbp, "neq_on: %d neq_off: %d ", ctl->waiting->neq_on, ctl->waiting->neq_off);
+	dbgprintfc(dbp, "c_t: %d", ctl->waiting->c_t);
+	dbgprintfc(dbp, "d_on: %d d_off: %d", ctl->waiting->d_on, ctl->waiting->d_off);
+	dbgprintfc(dbp, "dir_abs: %d slow: %d", ctl->waiting->dir_abs, ctl->waiting->no_accel);
 
-	dbgprintf("-------- Finished motor control calculations -------------");
+	dbgprintfc(dbp, "-------- Finished motor control calculations -------------");
 	// And thats it. Wow.
 	return w_m_f;
 }

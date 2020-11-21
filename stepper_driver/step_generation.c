@@ -23,6 +23,14 @@
 int32_t 	c_table_xy[C_TABLE_SIZE]; 		// contains timer preload values for each acceleration index n for all x and y axis
 int32_t 	c_table_z[C_TABLE_SIZE]; 		// Contains timer preload values for each acceleration index n for both z-axis
 
+// Human-readable names for motors to have a string in the motor handle for printf.
+char *x_dae_name = "X_DAE_MOTOR";
+char *y_dae_name = "Y_DAE_MOTOR";
+char *z_dae_name = "Z_DAE_MOTOR";
+char *x_gda_name = "X_GDA_MOTOR";
+char *y_gda_name = "Y_GDA_MOTOR";
+char *z_gda_name = "Z_GDA_MOTOR";
+
 // Width of step pulse. Has basically no effect on CPU load, but should not be too short
 // in order for the ISR to finish before the next interrupt comes. currently set to 40us.
 #define STEP_PULSE_WIDTH 	F_TIMER/25000
@@ -50,6 +58,7 @@ void STG_Init (void)
 	accel_table_init(c_table_xy, C_TABLE_SIZE, XY_ACCEL_MAX, XY_ALPHA);
 
 	// Init X_DAE motor
+	x_dae_motor.name = x_dae_name;
 	x_dae_motor.motor.hw.flip_dir = X_DAE_HW_FLIP_DIR;
 	x_dae_motor.motor.hw.dir_port = X_DAE_HW_DIR_PORT;
 	x_dae_motor.motor.hw.dir_pin = X_DAE_HW_DIR_PIN;
@@ -64,6 +73,7 @@ void STG_Init (void)
 	HAL_TIM_OC_Start_IT(X_DAE_HW_TIMER, X_DAE_HW_CHANNEL); // Start timer channel for this motor
 
 	// Init Y_DAE motor
+	y_dae_motor.name = y_dae_name;
 	y_dae_motor.motor.hw.flip_dir = Y_DAE_HW_FLIP_DIR;
 	y_dae_motor.motor.hw.dir_port = Y_DAE_HW_DIR_PORT;
 	y_dae_motor.motor.hw.dir_pin = Y_DAE_HW_DIR_PIN;
@@ -78,6 +88,7 @@ void STG_Init (void)
 	HAL_TIM_OC_Start_IT(Y_DAE_HW_TIMER, Y_DAE_HW_CHANNEL); // Start timer channel for this motor
 
 	// Init Z_DAE motor
+	z_dae_motor.name = z_dae_name;
 	z_dae_motor.motor.hw.flip_dir = Z_DAE_HW_FLIP_DIR;
 	z_dae_motor.motor.hw.dir_port = Z_DAE_HW_DIR_PORT;
 	z_dae_motor.motor.hw.dir_pin = Z_DAE_HW_DIR_PIN;
@@ -89,6 +100,10 @@ void STG_Init (void)
 	z_dae_motor.motor.hw.oc_inactive_mask = Z_DAE_HW_OC_INACTIVE_MASK;
 	z_dae_motor.motor.hw.oc_forced_inactive_mask = Z_DAE_HW_OC_FORCED_INACTIVE_MASK;
 	z_type_init(&z_dae_motor);
+
+
+	HAL_TIM_OC_Start_IT(X_DAE_HW_TIMER, X_DAE_HW_CHANNEL); // Start timer channel for this motor
+	HAL_TIM_OC_Start_IT(Y_DAE_HW_TIMER, Y_DAE_HW_CHANNEL); // Start timer channel for this motor
 	HAL_TIM_OC_Start_IT(Z_DAE_HW_TIMER, Z_DAE_HW_CHANNEL); // Start timer channel for this motor
 
 }
@@ -146,7 +161,7 @@ void xy_type_init(T_MOTOR_CONTROL *ctl)
 	// Initialize ISR control swap stuff
 	ctl->active = &stepper_shutoff; // Motor is stopped at the beginning
 	ctl->waiting = &(ctl->ctl_swap[0]); // swap[0] is waiting to be filled.
-	ctl->available = 0;
+	ctl->status = STG_IDLE;
 }
 
 /** @brief 	Initialisation function that is used for the z-axis.
@@ -176,7 +191,7 @@ void z_type_init(T_MOTOR_CONTROL *ctl)
 	// Initialize ISR control swap stuff
 	ctl->active = &stepper_shutoff; // Motor is stopped at the beginning
 	ctl->waiting = &(ctl->ctl_swap[0]); // swap[0] is waiting to be filled.
-	ctl->available = 0;
+	ctl->status = STG_IDLE;
 }
 
 /** @brief 	Usually, the timer swaps its control struct by itself. But if it is the first command or
@@ -192,6 +207,9 @@ void STG_StartCycle(T_MOTOR_CONTROL *ctl)
 {
 	uint16_t tim_preload;
 
+	// The prepared struct is always in "waiting". We therefore swap it to "active" first and then kick off the timer.
+	STG_swapISRcontrol(ctl);
+
 	// First mute the output (The ISR activates it again by itself immediately)
 	*(ctl->motor.hw.CCMR) &= ctl->motor.hw.oc_mask;
 	*(ctl->motor.hw.CCMR) |= ctl->motor.hw.oc_forced_inactive_mask;
@@ -203,6 +221,8 @@ void STG_StartCycle(T_MOTOR_CONTROL *ctl)
 	ctl->active->s = 0;
 	ctl->active->running = 1;
 	ctl->motor.c_err = 0;
+	ctl->motor.overshoot_on = 0;
+	ctl->motor.overshoot_off = 0;
 
 	// And finally offset the timer by 1, so that it starts at the next tick (which is statistically 0.5 intervals away).
 	tim_preload = __HAL_TIM_GET_COUNTER(ctl->motor.hw.timer) + 1;
@@ -218,6 +238,7 @@ void STG_StartCycle(T_MOTOR_CONTROL *ctl)
 void STG_hardstop (T_MOTOR_CONTROL *ctl)
 {
 	ctl->active = &stepper_shutoff;
+	ctl->status = STG_IDLE;
 }
 
 
@@ -231,7 +252,7 @@ void STG_hardstop (T_MOTOR_CONTROL *ctl)
  */
 void STG_swapISRcontrol (T_MOTOR_CONTROL *ctl)
 {
-	if (ctl->available == 1)
+	if (ctl->status == STG_PREPARED)
 	{
 
 		ctl->active = ctl->waiting;
@@ -247,21 +268,26 @@ void STG_swapISRcontrol (T_MOTOR_CONTROL *ctl)
 
 		if (ctl->active->shutoff == 1)
 		{
-			// Maybe something special to do with c_err here?
-			// This would be the place to do something for catchup.
+			// The motor calculator decied that this active cycle is a stop cycle.
+			// So the trajectory is completed and we are just waiting to be started again
+			// Maybe this would be a good point to do some statisctics with c_err and so on.
+			ctl->status = STG_IDLE;
 		}
-
-		ctl->active->running = 1;
-		debug_indicate_cycle_start(ctl->active->s_total, ctl->active->c_ideal/(F_TIMER/1000));
-		ctl->available = 0;	// Mark that the now waiting one does not contain valid information.
-		toggle_debug_led();
+		else
+		{
+			ctl->active->running = 1;
+			debug_indicate_cycle_start(ctl->active->s_total, ctl->active->c_ideal/(F_TIMER/1000));
+			ctl->status = STG_NOT_PREPARED;	// Mark that the now waiting one does not contain valid information.
+			toggle_debug_led();
+		}
 	}
-	else
+	else if (ctl->status == STG_NOT_PREPARED)
 	{
 		// for some reason the waiting control sturct has not been updated. As we cannot do anything
 		// sensible now, we stop the motor immediately (for now).
 		ctl->active = &stepper_shutoff;
-		dbgprintf("Swap ISR control: no new struct available");
+		ctl->status = STG_IDLE;
+		dbgprintf("Swap ISR control: No waiting structure was found. Stopping.");
 	}
 }
 

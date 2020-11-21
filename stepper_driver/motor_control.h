@@ -5,10 +5,16 @@
 	@date April 9th, 2019
  */
 
+# ifndef MOTOR_CONTROL_H_
+# define MOTOR_CONTROL_H_
+
 #define N_APPROX		4 					// Number of Interations used to find optimum passover speed
 #define R_ERR			1e-6 				// For zero detection on floats
 #define S_EXTRA			2					// acceleration is allowed to be S_EXTRA steps longer (overshoot protection catches it normally) to avoid big speed jumps if accel is a little to small
 #define W_ERR			100.0F				// To indicate something is wrong.
+
+#include "channels.h"
+#include "step_generation.h"
 
 typedef struct
 {
@@ -25,6 +31,8 @@ typedef struct
 
 // PROTOTYPES
 void SM_Init(void);
-int32_t SM_updateMotorControl(void);
+void SM_setMotorReady (T_MOTOR_CONTROL *ctl);
+int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha);
 void SM_restart_testcylce (void);
 
+# endif // MOTOR_CONTROL_H_

@@ -42,6 +42,7 @@
 #include "step_generation.h"
 #include "motor_control.h"
 #include "notes.h"
+#include "channels.h"
 #include <math.h>
 
 /* USER CODE END Includes */
@@ -68,6 +69,7 @@ SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim8;
+TIM_HandleTypeDef htim10;
 
 UART_HandleTypeDef huart3;
 
@@ -84,6 +86,7 @@ static void MX_SPI1_Init(void);
 static void MX_GFXSIMULATOR_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_TIM10_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -100,7 +103,6 @@ static void MX_TIM2_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	int32_t cycle_number;
 
   /* USER CODE END 1 */
 
@@ -129,14 +131,18 @@ int main(void)
   MX_GFXSIMULATOR_Init();
   MX_TIM8_Init();
   MX_TIM2_Init();
+  MX_TIM10_Init();
   /* USER CODE BEGIN 2 */
 
   /*
    * Put all sorts of user inits here
    */
+
   USB_CDC_Init();
 
-  debug_start_motor_tracking();
+  //debug_start_motor_tracking();
+
+  CHA_Init();
 
   SM_Init();
 
@@ -149,32 +155,33 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   int32_t wait_delay = 0;
+  int32_t run1 = 0, run2 = 0, run3 = 0;
   while (1)
   {
 
-	  HAL_Delay(1);
-	  cycle_number = SM_updateMotorControl();
+	  run1 |= SM_updateMotor(&x_dae_motor, &cha_posx_dae);
+	  run2 |= SM_updateMotor(&y_dae_motor, &cha_posy_dae);
+	  run3 |= SM_updateMotor(&z_dae_motor, &cha_str_dae);
 
-	  notes_e_set(cycle_number%8, 1);
+	  //toggle_debug_led();
+	  //notes_e_set(cycle_number%8, 1);
 
-
-	  if (cycle_number == TEST_POINTS - 2)
+	  if (run1 != 0 && run2 != 0 && run3 != 0)
 	  {
-		  if (wait_delay == 2000)
+		  run1 = 0;
+		  run2 = 0;
+		  run3 = 0;
+		  for (wait_delay=0; wait_delay < 2000; wait_delay++)
 		  {
-			  notes_init();
-			  SM_restart_testcylce();
-			  wait_delay = 0;
+			  HAL_Delay(1);
 		  }
-		  else
-		  {
-			  wait_delay++;
-		  }
-
+		  notes_init();
+		  SM_restart_testcylce();
+		  wait_delay = 0;
 	  }
 
 	  // Update debug transmit values
-	  debug_transmit_motor_tracking_data();
+	  //debug_transmit_motor_tracking_data();
 
     /* USER CODE END WHILE */
 
@@ -523,6 +530,37 @@ static void MX_TIM8_Init(void)
 
   /* USER CODE END TIM8_Init 2 */
   HAL_TIM_MspPostInit(&htim8);
+
+}
+
+/**
+  * @brief TIM10 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM10_Init(void)
+{
+
+  /* USER CODE BEGIN TIM10_Init 0 */
+
+  /* USER CODE END TIM10_Init 0 */
+
+  /* USER CODE BEGIN TIM10_Init 1 */
+
+  /* USER CODE END TIM10_Init 1 */
+  htim10.Instance = TIM10;
+  htim10.Init.Prescaler = 192;
+  htim10.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim10.Init.Period = 1000;
+  htim10.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim10.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim10) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM10_Init 2 */
+
+  /* USER CODE END TIM10_Init 2 */
 
 }
 

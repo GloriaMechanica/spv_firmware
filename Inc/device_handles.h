@@ -12,10 +12,19 @@
 	@date March 19th, 2019
  */
 
+#ifndef DEVICE_HANDLES_H_
+#define DEVICE_HANDLES_H_
+
+
 extern SPI_HandleTypeDef hspi1;
 
 extern TIM_HandleTypeDef htim1;
 
+extern TIM_HandleTypeDef htim10;
+
 extern UART_HandleTypeDef huart3;
 
 extern SPI_HandleTypeDef hspi1;
+
+
+#endif //DEVICE_HANDLES_H_

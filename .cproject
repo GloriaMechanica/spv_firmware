@@ -49,6 +49,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/spv_firmware/usb_cdc_comm}&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/spv_firmware/debug_utils}&quot;" />
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/spv_firmware/notes}&quot;" />
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/spv_firmware/channels}&quot;" />
 								</option>
 								<option id="com.atollic.truestudio.gcc.symbols.defined.1670122205" name="Defined symbols" superClass="com.atollic.truestudio.gcc.symbols.defined" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__weak=&quot;__attribute__((weak))&quot;" />
@@ -138,6 +139,7 @@
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Inc" />
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Middlewares" />
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Src" />
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="channels" />
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="debug_utils" />
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="notes" />
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="startup" />

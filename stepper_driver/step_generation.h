@@ -4,6 +4,10 @@
  *  @author Josef Heel
 	@date March 26th, 2019
  */
+
+#ifndef STEP_GENERATION_H_
+#define STEP_GENERATION_H_
+
 #include "main.h"
 // A sort of fixed-point arithmetic is used
 #define FACTOR			1000
@@ -13,6 +17,15 @@
 // Timer setup
 #define F_TIMER			8000000				// Motor timer frequency. currently 1MHz.
 #define C_MAX			65536				// 16 bit timer -> one revolution is 2^16 = 65536 ticks.
+
+typedef enum
+{
+	STG_IDLE, 		// Meaning the axis is resting because it previously encountered a zero-cycle or has not been started yet
+	STG_READY,		// Meaning the axis can start executing a new cycle because the timekeeper decided it needs to start now
+	STG_PREPARED,	// It has an active cycle running and the next one already prepared
+	STG_NOT_PREPARED,// It has an active cycle running, but the next one still needs to be calculated
+	STG_ERROR,		// When a calculation error has been made, this motor stops.
+}E_STG_EXECUTION_STATUS;
 
 typedef struct
 {
@@ -69,17 +82,18 @@ typedef struct
 	int32_t		*c_table; 		// Acceleration table. This pointer points to the right table somewhere in the ram to be used with this motor.
 	int32_t		overshoot_on; 	// Counter for how much overshoot was done when starting up
 	int32_t		overshoot_off; 	// Counter for how much overshoot was done when approaching passover speed
+	float		w_finish;		// finishing speed, when this cycle is done. Not used for calculations, but to correctly update the motor status after cycle execution.
 } T_ISR_CONTROL;
 
 // One of these for every motor. Contains all the information for this particular motor
 typedef struct
 {
+	char* 			name; 	// Pointer to string where name of motor is stored. Used to print out which motor it was in routines where only the handle is given.
 	T_STEPPER_STATE	motor;
 	T_ISR_CONTROL 	ctl_swap[2]; // This is the memory allocation for active and waiting structs. In active and waiting, there are the pointers of those two
 	T_ISR_CONTROL* 	active;
 	T_ISR_CONTROL* 	waiting;
-	int32_t			available; 	// Gets set to 1 if the waiting control struct has been updated and is ready to use in the next cycle
-	int32_t			cycle_in_execution; // reads 1 of the motor is currently self-following a trajectory. If it is paused, it reads 0.
+	E_STG_EXECUTION_STATUS	status; // reads 1 of the motor is currently self-following a trajectory. If it is paused, it reads 0.
 }T_MOTOR_CONTROL;
 
 // Global stepper state variables
@@ -94,6 +108,6 @@ void STG_Init (void);
 void STG_swapISRcontrol (T_MOTOR_CONTROL *ctl);
 void STG_StartCycle(T_MOTOR_CONTROL *ctl);
 
-
+#endif // STEP_GENERATION_H_
 
 

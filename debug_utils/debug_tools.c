@@ -30,7 +30,7 @@
 uint16_t 	debug_preload_buffer[DEBUG_MOTOR_TRACKING_BUFFER_SIZE];
 int32_t 	debug_motor_tracking_input_pointer; 				// pointing to the next free buffer word
 int32_t 	debug_motor_tracking_output_pointer; 				// pointing to the next word to read out
-uint32_t 	debug_motor_tracking_running; 						// Flag whether timer preload values should be output via USB
+uint32_t 	debug_motor_tracking_running = 0; 						// Flag whether timer preload values should be output via USB
 uint32_t 	debug_motor_tracking_drop_counter; 					// Counts how many timer values had to be dropped because they could not be emptied fast enough
 
 
@@ -55,6 +55,31 @@ void dbgprintf(const char *fmt, ...)
 	strcat(buf, "\n");
 
 	HAL_UART_Transmit(DEBUG_UART_HANDLE, (uint8_t*) buf, strlen(buf), DEBUG_UART_TX_TIMEOUT);
+}
+
+/** @brief Like dbgprintf(), but conditional
+ * 			Only prints information if dbp is not 0
+ *
+ *	@param dbp - 0: nothig is printed. 1: as dbgprintf()
+ *  @param fmt - format string of printf-type
+ *  @return (none)
+ */
+void dbgprintfc(uint32_t dbp, const char *fmt, ...)
+{
+	char buf[DEBUG_UART_TX_BUFFER_SIZE];
+
+	if (dbp)
+	{
+		// Get additional arguments and pass over to sprintf
+		va_list arg_ptr;
+		va_start(arg_ptr, fmt);
+		vsprintf(buf, fmt, arg_ptr);
+		va_end(arg_ptr);
+		strcat(buf, "\n");
+
+		HAL_UART_Transmit(DEBUG_UART_HANDLE, (uint8_t*) buf, strlen(buf), DEBUG_UART_TX_TIMEOUT);
+	}
+
 }
 
 /** @brief Prints out some bytes of a buffer directly on
