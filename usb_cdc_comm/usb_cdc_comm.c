@@ -14,6 +14,7 @@
 #include "usb_cdc_comm.h"
 #include "usbd_cdc_if.h"
 #include "debug_tools.h"
+#include "communication.h"
 
 
 // Struct for accessing the usb rx-buffer
@@ -71,14 +72,27 @@ int USB_CDC_TransmitBuffer(uint8_t* buffer, uint32_t length)
  */
 void USB_CDC_addDataToRxBuffer(uint8_t* buffer, uint32_t length)
 {
+	E_COM_PACKET_STATUS check;
+
 	if (usb_cdc_rx_buffer.top + length > USB_CDC_RX_BUFFER_SIZE)
 		return;
 
 	memcpy(&usb_cdc_rx_buffer.data[usb_cdc_rx_buffer.top], buffer, length);
 	usb_cdc_rx_buffer.top += length;
 
-	//dbgprintf("Buffer status:");
-	//dbgprintbuf(usb_cdc_rx_buffer.data, usb_cdc_rx_buffer.top);
+	check = COM_checkIfPacketValid(usb_cdc_rx_buffer.data, usb_cdc_rx_buffer.top);
+
+	if (check == COM_PACKET_VALID)
+	{
+		comm.packet_in_buffer = 1;
+	}
+	else
+	{
+		COM_restartTimeout();
+	}
+
+	dbgprintf("Buffer status: %d check: %d", usb_cdc_rx_buffer.top, check);
+	dbgprintbuf(usb_cdc_rx_buffer.data, usb_cdc_rx_buffer.top);
 }
 
 /** @brief Clears the receive buffer

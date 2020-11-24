@@ -43,7 +43,9 @@
 #include "motor_control.h"
 #include "notes.h"
 #include "channels.h"
+#include "timekeeper.h"
 #include <math.h>
+#include "communication.h"
 
 /* USER CODE END Includes */
 
@@ -142,11 +144,13 @@ int main(void)
 
   //debug_start_motor_tracking();
 
+  TK_startTimer();
+
   CHA_Init();
 
   SM_Init();
 
-  SM_restart_testcylce();
+  //SM_restart_testcylce();
 
   notes_init();
 
@@ -154,7 +158,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  int32_t wait_delay = 0;
+  //int32_t wait_delay = 0;
   int32_t run1 = 0, run2 = 0, run3 = 0;
   while (1)
   {
@@ -163,12 +167,14 @@ int main(void)
 	  run2 |= SM_updateMotor(&y_dae_motor, &cha_posy_dae);
 	  run3 |= SM_updateMotor(&z_dae_motor, &cha_str_dae);
 
+	  COM_update();
+
 	  //toggle_debug_led();
 	  //notes_e_set(cycle_number%8, 1);
 
 	  if (run1 != 0 && run2 != 0 && run3 != 0)
 	  {
-		  run1 = 0;
+		 /* run1 = 0;
 		  run2 = 0;
 		  run3 = 0;
 		  for (wait_delay=0; wait_delay < 2000; wait_delay++)
@@ -177,7 +183,7 @@ int main(void)
 		  }
 		  notes_init();
 		  SM_restart_testcylce();
-		  wait_delay = 0;
+		  wait_delay = 0;*/
 	  }
 
 	  // Update debug transmit values

@@ -15,13 +15,18 @@
 
 #include "main.h"
 #include "debug_tools.h"
+#include "motor_control.h"
 #include "channels.h"
 #include <string.h>
+
 // Memory allocation for channel buffers
 T_DTP_NOTE e_note_buffer[CHA_E_NOTE_LENGTH];
 T_DTP_MOTOR posx_dae_buffer[CHA_POSX_DAE_LENGTH];
 T_DTP_MOTOR posy_dae_buffer[CHA_POSX_DAE_LENGTH];
 T_DTP_MOTOR str_dae_buffer[CHA_POSX_DAE_LENGTH];
+
+// Main structure where channel time is accessed.
+T_CHANNEL_TIME channel_time;
 
 /** @brief 	Initializes all the channels presently in use
  *
@@ -184,8 +189,112 @@ void CHA_clearBuffer(T_CHANNEL *cha)
 	cha->out = 0;
 }
 
+/** @brief 	Forces the system time to a certain time
+ *
+ *  @param time - system time in ms which should be set
+ *  @return (none)
+ */
+void CHA_setChannelTime(uint32_t time)
+{
+	channel_time.time = time;
+}
 
+/** @brief 	Increments the channel time by 1.
+ * 			Should be called only by the timer with
+ * 			1ms period.
+ *
+ *  @param (none)
+ *  @return (none)
+ */
+void CHA_incrementChannelTime(void)
+{
+	channel_time.time += 1;
+}
 
+/** @brief 	Returns the current system time
+ *
+ *  @param (none)
+ *  @return the current system time in ms.
+ */
+uint32_t CHA_getChannelTime(void)
+{
+	return channel_time.time;
+}
+
+/** @brief 	Returns the current system time
+ *
+ *  @param (none)
+ *  @return 0 if the time is stopped, 1 if the time is running
+ */
+int32_t CHA_getIfTimeActive (void)
+{
+	return channel_time.time_running;
+}
+
+/** @brief 	Sets the SPV channels into action!
+ * 			The channel time gets incremented, and interesting
+ * 			datapoints will be executed ;-)
+ *
+ *  @param (none)
+ *  @return (none)
+ */
+void CHA_startTime (void)
+{
+	channel_time.time_running = 1;
+}
+
+/** @brief 	 Stops the channel time (which is music time)
+ *
+ * 			Be careful! When a motor self-follws a trajectory,
+ * 			it will continue to do so even without the channel time
+ * 			incrementing. It will, however, not continue when it
+ * 			encounters a zero-cycle.
+ *
+ *  @param (none)
+ *  @return (none)
+ */
+void CHA_stopTime (void)
+{
+	channel_time.time_running = 0;
+}
+
+/** @brief 	This function checks if any of the channels contains a datapoint
+ * 			that is due at just this millisecond. If so, it initiates action.
+ *
+ * 			It gets called once per ms from the timekeeper.
+ *
+ *  @param (none)
+ *  @return (none)
+ */
+void CHA_updateChannels (void)
+{
+	if (CHA_getNumberDatapoint(&cha_posx_dae) > 0)
+	{
+		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posx_dae))->timestamp == CHA_getChannelTime())
+		{
+			if (x_dae_motor.status == STG_IDLE)
+				SM_setMotorReady(&x_dae_motor);
+		}
+	}
+
+	if (CHA_getNumberDatapoint(&cha_posy_dae) > 0)
+	{
+		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posy_dae))->timestamp == CHA_getChannelTime())
+		{
+			if (y_dae_motor.status == STG_IDLE)
+				SM_setMotorReady(&y_dae_motor);
+		}
+	}
+
+	if (CHA_getNumberDatapoint(&cha_str_dae) > 0)
+	{
+		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_str_dae))->timestamp == CHA_getChannelTime())
+		{
+			if (z_dae_motor.status == STG_IDLE)
+				SM_setMotorReady(&z_dae_motor);
+		}
+	}
+}
 
 
 

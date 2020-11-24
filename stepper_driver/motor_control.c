@@ -89,9 +89,9 @@ void SM_restart_testcylce (void)
 		CHA_pushDatapoints(&cha_str_dae, (void*) &datapoint, 1);
 	}
 
-	TK_setSystime(0);
-	dbgprintf(" RESTART testcycle at t=%d", TK_getSystime());
-	TK_startTimer();
+	CHA_setChannelTime(0);
+	CHA_startTime();
+	dbgprintf(" RESTART testcycle at t=%d", CHA_getChannelTime());
 }
 
 /** @brief  Immediately shuts the motor off.
@@ -189,7 +189,7 @@ int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha)
 		{
 			// This is a new self-following trajectory to start. The motor has not been moving previously
 			setup.w_s = 0; // this is the start of a new trajectory, so start speed is 0
-			dbgprintf("%s Start trajectory of at t=%d: ", ctl->name, TK_getSystime());
+			dbgprintf("%s Start trajectory of at t=%d: ", ctl->name, CHA_getChannelTime());
 			w_ret = calculate_motor_control(&setup, ctl);
 			if (w_ret == W_ERR)
 			{
@@ -208,7 +208,7 @@ int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha)
 		{
 			// This is a point in a trajectory and not a new one.
 			setup.w_s = ctl->active->w_finish; // set the start of this waiting cycle to the finishing speed of the currently active one
-			dbgprintf("%s continue trajectory at t=%d: ", ctl->name, TK_getSystime());
+			dbgprintf("%s continue trajectory at t=%d: ", ctl->name, CHA_getChannelTime());
 			w_ret = calculate_motor_control(&setup, ctl);
 			if (w_ret == W_ERR)
 			{
@@ -290,7 +290,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 	// TODO: do this properly
 	int dbp=0;
 	if (ctl == &x_dae_motor)
-		dbp = 1;
+		dbp = 0;
 
 	// Equivalent acceleration indices
 	int32_t	neq_mean0;
@@ -307,8 +307,8 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 
 
 	// Print out input parameters for test purposes
-	dbgprintfc(1, "delta_s0: %d steps  in   delta_t0: %d ms", setup->delta_s0, setup->delta_t0);
-	dbgprintfc(1, "delta_s1: %d steps  in   delta_t1: %d ms", setup->delta_s1, setup->delta_t1);
+	dbgprintfc(dbp, "delta_s0: %d steps  in   delta_t0: %d ms", setup->delta_s0, setup->delta_t0);
+	dbgprintfc(dbp, "delta_s1: %d steps  in   delta_t1: %d ms", setup->delta_s1, setup->delta_t1);
 	dbgprintfc(dbp, "start speed: %f rad/s", setup->w_s);
 
 	// First, decide some important things. Are all inputs valid?
