@@ -17,18 +17,6 @@
 #include "communication.h"
 
 
-// Struct for accessing the usb rx-buffer
-typedef struct
-{
-	uint8_t data[USB_CDC_RX_BUFFER_SIZE]; 		// space for keeping received data
-	uint32_t top; 								// Offset to the first empty byte of the buffer
-}T_USB_CDC_RX_BUFFER;
-
-
-// GLOBAL VARIABLES
-T_USB_CDC_RX_BUFFER usb_cdc_rx_buffer; 			// Global data structure for keeping received data
-
-
 /** @brief When using USB CDC stuff, call this fx first
  *
  *  @param (none)
@@ -46,7 +34,7 @@ int USB_CDC_Init(void)
  *
  *  @param buffer - byte array containing bytes to transmit
  *  @param length - number of bytes to transmit out of buffer
- *  @return (none)
+ *  @return 0 if success, 1 otherwise
  */
 int USB_CDC_TransmitBuffer(uint8_t* buffer, uint32_t length)
 {
@@ -84,7 +72,7 @@ void USB_CDC_addDataToRxBuffer(uint8_t* buffer, uint32_t length)
 
 	if (check == COM_PACKET_VALID)
 	{
-		comm.packet_in_buffer = 1;
+		usb_cdc_rx_buffer.packet_in_buffer = 1;
 	}
 	else
 	{
@@ -102,6 +90,7 @@ void USB_CDC_addDataToRxBuffer(uint8_t* buffer, uint32_t length)
 void USB_CDC_clearRxBuffer(void)
 {
 	usb_cdc_rx_buffer.top = 0;
+	usb_cdc_rx_buffer.packet_in_buffer = 0;
 }
 
 

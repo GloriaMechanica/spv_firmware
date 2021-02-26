@@ -154,6 +154,9 @@ void Error_Handler(void);
 
 #define SUCCESS		0
 #define ERROR		-1
+#define ACK			0
+#define NACK		1
+
 
 // To quickly change from float to double
 typedef double real;
