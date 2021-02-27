@@ -74,9 +74,14 @@ void USB_CDC_addDataToRxBuffer(uint8_t* buffer, uint32_t length)
 	{
 		usb_cdc_rx_buffer.packet_in_buffer = 1;
 	}
-	else
+	else if (check == COM_PACKET_SMALLER_MINIMAL_LENGTH)
 	{
 		COM_restartTimeout();
+	}
+	else
+	{
+		// Any other error -> respond with NACK
+		usb_cdc_rx_buffer.packet_in_buffer = -1;
 	}
 
 	dbgprintf("Buffer status: %d check: %d", usb_cdc_rx_buffer.top, check);

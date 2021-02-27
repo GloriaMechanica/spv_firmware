@@ -41,6 +41,7 @@ void COM_update (void)
 {
 	if (usb_cdc_rx_buffer.packet_in_buffer==1)
 	{
+		// There is a good packet in the buffer -> decode and execute it
 		COM_decodePackage(&(usb_cdc_rx_buffer.data[COMM_COMMAND_POSITION]), usb_cdc_rx_buffer.top - (COM_MIN_PACKET_LEN));
 
 		// DEBUG
@@ -48,6 +49,12 @@ void COM_update (void)
 
 		// Clear the buffer at the end, so that new commands are correctly interpreted
 		USB_CDC_clearRxBuffer();
+	}
+	else if (usb_cdc_rx_buffer.packet_in_buffer == (-1))
+	{
+		// There is a bad packet in the buffer, and no more is going to come.
+		USB_CDC_clearRxBuffer(); // We don't need the bad packet anymore
+		COM_sendResponse(NACK, NULL, 0); // Indicate by a NACK that something is wrong.
 	}
 
 }
@@ -64,8 +71,22 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 {
 	dbgprintf("Command: %01X", buf[0]);
 	dbgprintf("Data length: %d", len);
+	uint8_t command = buf[0];
 
-	COM_sendResponse(ACK, NULL, 0);
+	if (command == COMM_STATUS)
+	{
+		// PC requested the status of the SPV
+		uint8_t data[2];
+		data[0] = 0;
+		data[1] = 1;
+		COM_sendResponse(ACK, data, sizeof(data));
+	}
+	else
+	{
+		dbgprintf("Unknown command.");
+		COM_sendResponse(NACK, NULL, 0);
+	}
+
 }
 
 /** @brief 	Called from the 1ms-timer. Used to update the timeout
@@ -126,7 +147,7 @@ E_COM_PACKET_STATUS COM_checkIfPacketValid(uint8_t *buf, int32_t len)
 	uint16_t packet_len = 0;
 	uint16_t crc_calc = 0, crc_send = 0;
 
-	if (len < COM_MIN_PACKET_LEN || len < 2)
+	if (len < COM_MIN_PACKET_LEN || len < 2) // < 2 is for safety that the next if does not produce a segfault
 		return COM_PACKET_SMALLER_MINIMAL_LENGTH;
 
 	if (buf[0] != COM_SPV_UID_0 && buf[1] != COM_SPV_UID_1)
@@ -172,8 +193,8 @@ E_COM_PACKET_STATUS COM_sendResponse(uint8_t status, uint8_t *data, int32_t len)
 	uint8_t buf[len + COM_MIN_PACKET_LEN];
 	buf[0] = COM_SPV_UID_0;
 	buf[1] = COM_SPV_UID_1;
-	buf[2] = (len & 0x0000FF00) >> 8;
-	buf[3] = (len & 0x000000FF);
+	buf[2] = ((len+8) & 0x0000FF00) >> 8;
+	buf[3] = ((len+8) & 0x000000FF);
 	buf[4] = comm.packet_counter++;
 	buf[5] = status;
 	if (len != 0)
