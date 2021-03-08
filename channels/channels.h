@@ -9,6 +9,11 @@
 #ifndef CHANNELS_H_
 #define CHANNELS_H_
 
+// Numbers for channels according to specification
+#define		CHA_E_NOTE_NR		3
+#define		CHA_POSX_DAE_NR		4
+#define		CHA_POSY_DAE_NR		5
+#define		CHA_STR_DAE_NR		6
 
 // Number of datapoints in each channel (can be adjusted individually to have more buffer for more active channels such as STR_DAE)
 #define CHA_G_NOTE_LENGTH 		50
@@ -28,6 +33,7 @@
  */
 typedef struct
 {
+	uint8_t	channel_number; // characteristical number (spec). Just set to const and read from there
 	int32_t buffer_length; // Number of datapoints in this buffer
 	int32_t ellen; // element length: because void pointers are used, to increment them
 	void*	base; // pointer to incoming element

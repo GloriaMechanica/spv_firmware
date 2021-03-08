@@ -36,6 +36,7 @@ T_CHANNEL_TIME channel_time;
 void CHA_Init(void)
 {
 	// E_NOTE channel
+	cha_e_note.channel_number = CHA_E_NOTE_NR;
 	cha_e_note.base = (void*) e_note_buffer;
 	cha_e_note.ellen = sizeof(e_note_buffer[0]);
 	cha_e_note.buffer_length = CHA_E_NOTE_LENGTH;
@@ -43,6 +44,7 @@ void CHA_Init(void)
 	cha_e_note.out = 0;
 
 	// POSX_DAE channel
+	cha_posx_dae.channel_number = CHA_POSX_DAE_NR;
 	cha_posx_dae.base = (void*) posx_dae_buffer;
 	cha_posx_dae.ellen = sizeof(posx_dae_buffer[0]);
 	cha_posx_dae.buffer_length = CHA_POSX_DAE_LENGTH;
@@ -50,6 +52,7 @@ void CHA_Init(void)
 	cha_posx_dae.out = 0;
 
 	// POSY_DAE channel
+	cha_posy_dae.channel_number = CHA_POSY_DAE_NR;
 	cha_posy_dae.base = (void*) posy_dae_buffer;
 	cha_posy_dae.ellen = sizeof(posy_dae_buffer[0]);
 	cha_posy_dae.buffer_length = CHA_POSY_DAE_LENGTH;
@@ -57,6 +60,7 @@ void CHA_Init(void)
 	cha_posy_dae.out = 0;
 
 	// STR_Z_DAE channel
+	cha_str_dae.channel_number = CHA_STR_DAE_NR;
 	cha_str_dae.base = (void*) str_dae_buffer;
 	cha_str_dae.ellen = sizeof(str_dae_buffer[0]);
 	cha_str_dae.buffer_length = CHA_STR_DAE_LENGTH;

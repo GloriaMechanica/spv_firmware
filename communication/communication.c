@@ -14,6 +14,7 @@
 #include "usb_cdc_comm.h"
 #include "debug_tools.h"
 #include "command_def.h"
+#include "settings.h"
 
 // PROTOTYPES
 unsigned short crc16(const unsigned char* data_p, unsigned char length);
@@ -73,20 +74,73 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 	dbgprintf("Data length: %d", len);
 	uint8_t command = buf[0];
 
-	if (command == COMM_STATUS)
+	// -----------------------------------------------------
+	if (command == COMM_GETSTATUS)
 	{
 		// PC requested the status of the SPV
-		uint8_t data[2];
-		data[0] = 0;
-		data[1] = 1;
+		uint8_t data[COMM_STATUS_FIELD_SIZE];
+		uint8_t *ptr = &(data[0]);
+
+		*(ptr++) = COMM_STAT_ID_TAG;
+		*(ptr++) = COMM_STAT_ID_LEN;
+		*(ptr++) = SOFTWARE_ID_0;
+		*(ptr++) = SOFTWARE_ID_1;
+
+		uint32_t timestamp = CHA_getChannelTime();
+		*(ptr++) = COMM_STAT_TIME_TAG;
+		*(ptr++) = COMM_STAT_TIME_LEN;
+		memcpy(ptr, &timestamp, COMM_STAT_TIME_LEN);
+		ptr += COMM_STAT_TIME_LEN;
+
+		*(ptr++) = COMM_STAT_RUNNING_TAG;
+		*(ptr++) = COMM_STAT_RUNNING_LEN;
+		*(ptr++) = CHA_getIfTimeActive() & 0x000000FF;
+
+		// DO NOT FORGET to adapt COMM_STATUS_FIELD_SIZE when adding new status fields here.
+
 		COM_sendResponse(ACK, data, sizeof(data));
 	}
+	// -----------------------------------------------------
+	else if (command == COMM_GETMACHINESTATUS)
+	{
+		dbgprintf("Get machine status is not implemented yet.");
+		COM_sendResponse(ACK, NULL, 0);
+	}
+	// -----------------------------------------------------
+	else if (command == COMM_REQUESTCHANNELFILL)
+	{
+		// PC wants to know how many points are missing (empty) in each channel.
+		uint8_t data[COMM_CHANNELFILL_CHANNELS*COMM_CHANNELFILL_FIELD_LEN];
+		uint8_t *ptr = &(data[0]);
+		uint8_t missing = 0;
+
+		T_CHANNEL *channels[COMM_CHANNELFILL_CHANNELS];
+		channels[0] = &cha_e_note;
+		channels[1] = &cha_posx_dae;
+		channels[2] = &cha_posy_dae;
+		channels[3] = &cha_str_dae;
+		// DO NOT FORGET to adapt COMM_CHANNELFILL_CHANNELS when adding more channels here!
+
+		int32_t i;
+		for (i = 0; i < COMM_CHANNELFILL_CHANNELS; i++)
+		{
+			missing = channels[i]->buffer_length - CHA_getNumberDatapoint(channels[i]);
+			if (missing > 0)
+			{
+				*(ptr++) = COMM_STAT_CHANNELFILL_TAG;
+				*(ptr++) = COMM_STAT_CHANNELFILL_LEN;
+				*(ptr++) = channels[i]->channel_number;
+				*(ptr++) = missing;
+			}
+		}
+		COM_sendResponse(ACK, data, (int)(ptr - &(data[0])));
+	}
+	// -----------------------------------------------------
 	else
 	{
 		dbgprintf("Unknown command.");
 		COM_sendResponse(NACK, NULL, 0);
 	}
-
 }
 
 /** @brief 	Called from the 1ms-timer. Used to update the timeout

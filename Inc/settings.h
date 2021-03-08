@@ -11,3 +11,8 @@
  * USB CDC Communication with PC for music data
  */
 #define 	DBG_TIM_ISR_LOAD_PIN		0			// switch to 1-> duration in timer-isr will pull the ISR_LOAD Pin high.
+
+
+
+#define 	SOFTWARE_ID_0				0x00
+#define 	SOFTWARE_ID_1				0x01
