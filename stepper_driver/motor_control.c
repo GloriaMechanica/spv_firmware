@@ -14,9 +14,9 @@
 
 // Debug-only stuff
 int32_t test_positions_xy[TEST_POINTS] = {0, 	500, 	500, 	1550, 	250, 	2000, 	0, 		100, 		0};
-int32_t test_times_xy[TEST_POINTS] = 	  {0, 	300, 	700, 	1200, 	1800, 	2300, 	2800, 	2900, 	3000};
+int32_t test_times_xy[TEST_POINTS] = 	  {0, 	300, 	400, 	500, 	600, 	500, 	500, 	100, 	100};
 int32_t test_positions_z[TEST_POINTS] = {0, 	1000, 	2000, 	3100, 	500, 	10000, 	0, 		400, 		0};
-int32_t test_times_z[TEST_POINTS] = 	  {0, 	300, 	700, 	1200, 	1800, 	2800, 	3800, 	4000, 	4500};
+int32_t test_times_z[TEST_POINTS] = 	  {0, 	300, 	400, 	500, 	600, 	1000, 	1000, 	200, 	500};
 real w_old_x, w_old_y, w_old_z;
 int32_t cycle_number_x, cycle_number_y, cycle_number_z;
 
@@ -67,15 +67,13 @@ void SM_restart_testcylce (void)
 	T_DTP_MOTOR datapoint;
 
 	TK_stopTimer();
-	CHA_clearBuffer(&cha_posx_dae);
-	CHA_clearBuffer(&cha_posy_dae);
-	CHA_clearBuffer(&cha_str_dae);
+	CHA_Init(); // Clears all channel buffers and sets all the last executed times to 0
 
 	// Push some events in the queue
 	for (i = 0; i < TEST_POINTS; i++)
 	{
 		datapoint.steps = test_positions_xy[i];
-		datapoint.timestamp = test_times_xy[i];
+		datapoint.timediff = test_times_xy[i];
 		CHA_pushDatapoints(&cha_posx_dae, (void*) &datapoint, 1);
 		CHA_pushDatapoints(&cha_posy_dae, (void*) &datapoint, 1);
 	}
@@ -85,7 +83,7 @@ void SM_restart_testcylce (void)
 	for (i = 0; i < TEST_POINTS; i++)
 	{
 		datapoint.steps = test_positions_z[i];
-		datapoint.timestamp = test_times_z[i];
+		datapoint.timediff = test_times_z[i];
 		CHA_pushDatapoints(&cha_str_dae, (void*) &datapoint, 1);
 	}
 
@@ -103,12 +101,16 @@ void SM_hardstop (void)
 
 }
 
-/** @brief  Call when time reached the timestamp of the first element in the channel buffer
+/** @brief  Call when time reached the timestamp of the first element in the channel buffer.
  *  @param 	(none)
  *  @return (none)
  */
 void SM_setMotorReady (T_MOTOR_CONTROL *ctl)
 {
+	// The motor controller always calculates the difference to the last scheduled position
+	// As the motor is not moving, the last scheduled position must have been the one we are currently at.
+	ctl->motor.scheduled_pos = ctl->motor.pos;
+
 	ctl->status = STG_READY;
 }
 
@@ -120,7 +122,7 @@ void SM_setMotorReady (T_MOTOR_CONTROL *ctl)
  * 			do so.
  *
  * 			When the time reaches the timestamp of the execution, status
- * 			STG_READY should be set and this thing will start the exection
+ * 			STG_READY should be set and this thing will start the execution
  *
  * 			When the step generator requires a new cycle to be calculated in
  * 			an ongoing trajectory, it will set STG_NOT_PREPARED and this
@@ -134,7 +136,7 @@ void SM_setMotorReady (T_MOTOR_CONTROL *ctl)
 int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha)
 {
 	T_SPT_CYCLESPEC setup;
-	T_DTP_MOTOR datapoint[3];
+	T_DTP_MOTOR datapoint[2];
 	int32_t points_available;
 	int32_t ret = 0;
 	real w_ret = 0.0;
@@ -146,44 +148,40 @@ int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha)
 		// pop one, read, whats there and fill the rest up with zero-cycles (you always need something
 		// pass to the motor_calculations function.
 		points_available = CHA_getNumberDatapoint(cha);
-		if (points_available >=3)
+		if (points_available >=2)
 		{
 			CHA_popDatapoints(cha, (void*) &(datapoint[0]),1);
-			CHA_readDatapoints(cha, (void*) &(datapoint[1]), 2); // get two new datapoints without deleting. One is where we need to be next, and one is to optimize the speed when we are at the next.
-		}
-		else if (points_available == 2)
-		{
-			// Add one zero-cylce at the end
-			CHA_popDatapoints(cha, (void*) &(datapoint[0]),1);
-			CHA_readDatapoints(cha, (void*) &(datapoint[1]), 1);
-			datapoint[2].timestamp = datapoint[1].timestamp + 100;
-			datapoint[2].steps = datapoint[1].steps;
+			CHA_readDatapoints(cha, (void*) &(datapoint[1]), 1); // get one new datapoint without deleting.
 		}
 		else if (points_available == 1)
 		{
-			// Add two zero-cylces at the end
+			// Add one zero-cylce at the end
 			CHA_popDatapoints(cha, (void*) &(datapoint[0]),1);
-			datapoint[1].timestamp = datapoint[0].timestamp + 100;
+			datapoint[1].timediff = 100;
 			datapoint[1].steps = datapoint[0].steps;
-			datapoint[2].timestamp = datapoint[1].timestamp + 100;
-			datapoint[2].steps = datapoint[1].steps;
-			dbgprintf("Last point for motor %s", ctl->name);
+			dbgprintf("Last point for %s", ctl->name);
 			ret = -1;
 		}
 		else if (points_available == 0)
 		{
-			// No more datapoints available -> we are sitting on the last datapoint. End of the song.
-			// (Or the buffer filling was lazy and did not catch up, but this must never happen).
-			// TODO: What to do now?
-			dbgprintf("Ran out of data for motor %s", ctl->name);
-			return -2;
+			// Add two zero-cycles at the end
+			datapoint[0].timediff = 100;
+			datapoint[0].steps = ctl->motor.scheduled_pos;
+			datapoint[1].timediff = 100;
+			datapoint[1].steps = datapoint[0].steps;
+			dbgprintf("No points for %s", ctl->name);
 		}
 
 		// And extract the difference between datapoints and pass them over to the motor calculator
-		setup.delta_s0 = datapoint[1].steps - datapoint[0].steps; // where we need to be minus where we are
-		setup.delta_t0 = datapoint[1].timestamp - datapoint[0].timestamp;
-		setup.delta_s1 = datapoint[2].steps - datapoint[1].steps;
-		setup.delta_t1 = datapoint[2].timestamp - datapoint[1].timestamp;
+		setup.delta_s0 = datapoint[0].steps - ctl->motor.scheduled_pos; // where we need to be minus where we are
+		setup.delta_t0 = datapoint[0].timediff;
+		setup.delta_s1 = datapoint[1].steps - datapoint[0].steps;
+		setup.delta_t1 = datapoint[1].timediff;
+
+		// As the setup for the next cycle is done, we just scheduled a next position
+		// so we need to update this variable. Additionally, the last executed time point needs to be incremented.
+		ctl->motor.scheduled_pos = datapoint[0].steps;
+		cha->last_point_time = cha->last_point_time + datapoint[0].timediff;
 
 		if (ctl->status == STG_READY)
 		{

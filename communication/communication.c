@@ -134,6 +134,8 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 			}
 		}
 		COM_sendResponse(ACK, data, (int)(ptr - &(data[0])));
+
+		SM_restart_testcylce(); // JUST FOR DEBUG
 	}
 	// -----------------------------------------------------
 	else

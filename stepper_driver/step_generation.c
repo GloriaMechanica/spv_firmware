@@ -147,6 +147,7 @@ void accel_table_init(int32_t *array, uint32_t length, real acceleration, real a
 void xy_type_init(T_MOTOR_CONTROL *ctl)
 {
 	ctl->motor.pos = 0;
+	ctl->motor.scheduled_pos = 0;
 	ctl->motor.acc = XY_ACCEL_MAX;
 	ctl->motor.w_max = XY_SPEED_MAX;
 	ctl->motor.alpha = XY_ALPHA;
@@ -177,6 +178,7 @@ void xy_type_init(T_MOTOR_CONTROL *ctl)
 void z_type_init(T_MOTOR_CONTROL *ctl)
 {
 	ctl->motor.pos = 0;
+	ctl->motor.scheduled_pos = 0;
 	ctl->motor.acc = Z_ACCEL_MAX;
 	ctl->motor.w_max = Z_SPEED_MAX;
 	ctl->motor.alpha = Z_ALPHA;

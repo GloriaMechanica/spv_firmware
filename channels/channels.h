@@ -39,6 +39,7 @@ typedef struct
 	void*	base; // pointer to incoming element
 	int32_t in; // index of incoming element which is empty and ready to write on (array-like)
 	int32_t out; // index of outgoing element which is filled and ready to be read (array-like numeration)
+	uint32_t last_point_time; // used to keep the time stamp of the last event to be able to check when the relative time has elapsed
 }T_CHANNEL;
 
 /*

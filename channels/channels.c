@@ -42,6 +42,7 @@ void CHA_Init(void)
 	cha_e_note.buffer_length = CHA_E_NOTE_LENGTH;
 	cha_e_note.in = 0; // empty
 	cha_e_note.out = 0;
+	cha_e_note.last_point_time = 0;
 
 	// POSX_DAE channel
 	cha_posx_dae.channel_number = CHA_POSX_DAE_NR;
@@ -50,6 +51,7 @@ void CHA_Init(void)
 	cha_posx_dae.buffer_length = CHA_POSX_DAE_LENGTH;
 	cha_posx_dae.in = 0;
 	cha_posx_dae.out = 0;
+	cha_posx_dae.last_point_time = 0;
 
 	// POSY_DAE channel
 	cha_posy_dae.channel_number = CHA_POSY_DAE_NR;
@@ -58,6 +60,7 @@ void CHA_Init(void)
 	cha_posy_dae.buffer_length = CHA_POSY_DAE_LENGTH;
 	cha_posy_dae.in = 0;
 	cha_posy_dae.out = 0;
+	cha_posy_dae.last_point_time = 0;
 
 	// STR_Z_DAE channel
 	cha_str_dae.channel_number = CHA_STR_DAE_NR;
@@ -66,6 +69,7 @@ void CHA_Init(void)
 	cha_str_dae.buffer_length = CHA_STR_DAE_LENGTH;
 	cha_str_dae.in = 0;
 	cha_str_dae.out = 0;
+	cha_str_dae.last_point_time = 0;
 }
 
 /** @brief 	Pushes count elements that can be found in *in on the channel buffer
@@ -274,7 +278,8 @@ void CHA_updateChannels (void)
 {
 	if (CHA_getNumberDatapoint(&cha_posx_dae) > 0)
 	{
-		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posx_dae))->timestamp == CHA_getChannelTime())
+		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posx_dae))->timediff ==
+				CHA_getChannelTime() - cha_posx_dae.last_point_time)
 		{
 			if (x_dae_motor.status == STG_IDLE)
 				SM_setMotorReady(&x_dae_motor);
@@ -283,7 +288,8 @@ void CHA_updateChannels (void)
 
 	if (CHA_getNumberDatapoint(&cha_posy_dae) > 0)
 	{
-		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posy_dae))->timestamp == CHA_getChannelTime())
+		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posy_dae))->timediff ==
+				CHA_getChannelTime() - cha_posy_dae.last_point_time)
 		{
 			if (y_dae_motor.status == STG_IDLE)
 				SM_setMotorReady(&y_dae_motor);
@@ -292,7 +298,8 @@ void CHA_updateChannels (void)
 
 	if (CHA_getNumberDatapoint(&cha_str_dae) > 0)
 	{
-		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_str_dae))->timestamp == CHA_getChannelTime())
+		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_str_dae))->timediff ==
+				CHA_getChannelTime() - cha_str_dae.last_point_time)
 		{
 			if (z_dae_motor.status == STG_IDLE)
 				SM_setMotorReady(&z_dae_motor);

@@ -46,6 +46,7 @@ typedef struct
 {
 	// General motor data
 	int32_t 		pos; 			// Absolute motor position, relative to end stop [in steps]
+	int32_t			scheduled_pos;	// Next scheduled position. After completion of the ongoing cycle, the motor will be there. scheduled_pos is identical to pos if the motor stands still
 	float			acc; 			// Maximum allowed acceleration/deceleration [rad^2/sec]
 	float 			w_max; 			// maximal allowed motor speed [rad/sec]
 	float 			alpha; 			// Rotor angle per step [rad]

@@ -14,7 +14,7 @@
  */
 typedef struct __attribute__((__packed__))
 {
-	uint32_t timestamp;		// absolute timestamp in ms (ms into the song)
+	uint32_t timediff;		// relative time difference in ms to last datapoint (or to start timepoint)
 	int32_t steps;			// number of steps from calibrated zero-point
 }T_DTP_MOTOR;
 
@@ -30,7 +30,7 @@ typedef struct __attribute__((__packed__))
  */
 typedef struct __attribute__((__packed__))
 {
-	uint32_t timestamp;    	// absolute timestamp in ms (ms into the song)
+	uint32_t timediff;    	// relative time difference in ms to last datapoint (or to start timepoint)
 	uint8_t  note;			// number of note to be pressed on that string, in midi notataion (e.g. 76 is the empty E-string)
 }T_DTP_NOTE;
 
