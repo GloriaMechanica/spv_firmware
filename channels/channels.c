@@ -28,6 +28,12 @@ T_DTP_MOTOR str_dae_buffer[CHA_POSX_DAE_LENGTH];
 // Main structure where channel time is accessed.
 T_CHANNEL_TIME channel_time;
 
+T_CHANNEL *cha_list[CHA_NUMBER_CHANNELS_TOTAL] =
+		{&cha_g_note, &cha_d_note, &cha_a_note, &cha_e_note,
+		&cha_posx_dae, &cha_posy_dae, &cha_str_dae,
+		&cha_posx_gda, &cha_posy_gda, &cha_str_gda,
+		&cha_g_vib, &cha_d_vib, &cha_a_vib, &cha_e_vib};
+
 /** @brief 	Initializes all the channels presently in use
  *
  *  @param (none)

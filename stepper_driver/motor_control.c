@@ -66,7 +66,7 @@ void SM_restart_testcylce (void)
 	int i;
 	T_DTP_MOTOR datapoint;
 
-	TK_stopTimer();
+	CHA_stopTime();
 	CHA_Init(); // Clears all channel buffers and sets all the last executed times to 0
 
 	// Push some events in the queue
@@ -90,6 +90,17 @@ void SM_restart_testcylce (void)
 	CHA_setChannelTime(0);
 	CHA_startTime();
 	dbgprintf(" RESTART testcycle at t=%d", CHA_getChannelTime());
+}
+
+/** @brief  Starts playing off channel data. Time is initialized to 0
+ *  @param 	(none)
+ *  @return (none)
+ */
+void SM_startPlaying (void)
+{
+	CHA_setChannelTime(0);
+	CHA_startTime();
+	dbgprintf("START playing channel data at t=%d", CHA_getChannelTime());
 }
 
 /** @brief  Immediately shuts the motor off.

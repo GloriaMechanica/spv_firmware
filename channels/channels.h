@@ -9,7 +9,10 @@
 #ifndef CHANNELS_H_
 #define CHANNELS_H_
 
+#define 	CHA_NUMBER_CHANNELS_TOTAL 	14
+
 // Numbers for channels according to specification
+// Be careful: when changing something here, you also need to change the order in cha_list[] in channels.c
 #define		CHA_E_NOTE_NR		3
 #define		CHA_POSX_DAE_NR		4
 #define		CHA_POSY_DAE_NR		5
@@ -58,13 +61,23 @@ typedef struct
 }T_CHANNEL_TIME;
 
 // Allocation of channel buffer handles
+T_CHANNEL cha_g_note;
+T_CHANNEL cha_d_note;
+T_CHANNEL cha_a_note;
 T_CHANNEL cha_e_note;
 T_CHANNEL cha_posx_dae;
 T_CHANNEL cha_posy_dae;
 T_CHANNEL cha_str_dae;
+T_CHANNEL cha_posx_gda;
+T_CHANNEL cha_posy_gda;
+T_CHANNEL cha_str_gda;
+T_CHANNEL cha_g_vib;
+T_CHANNEL cha_d_vib;
+T_CHANNEL cha_a_vib;
+T_CHANNEL cha_e_vib;
 
-
-
+// an array with all the channel pointers (for easy selection by channel number)
+extern T_CHANNEL *cha_list[CHA_NUMBER_CHANNELS_TOTAL];
 
 // Prototypes
 void CHA_Init(void);

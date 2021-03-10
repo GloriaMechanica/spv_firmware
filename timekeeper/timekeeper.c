@@ -36,7 +36,7 @@ void TK_startTimer(void)
  */
 void TK_stopTimer(void)
 {
-	HAL_TIM_Base_Start_IT(&htim10);
+	HAL_TIM_Base_Stop_IT(&htim10);
 }
 
 /** @brief 	ISR callback which gets executed every millisecond if TK timer

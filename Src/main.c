@@ -150,8 +150,6 @@ int main(void)
 
   SM_Init();
 
-  //SM_restart_testcylce();
-
   notes_init();
 
   /* USER CODE END 2 */

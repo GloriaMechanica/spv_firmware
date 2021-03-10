@@ -40,7 +40,7 @@ T_COMMUNICATION comm;
 
 void COM_update (void);
 void COM_updateTimeout (void);
-void COM_restartTimeout (void);
+void COM_startTimeout (void);
 E_COM_PACKET_STATUS COM_checkIfPacketValid(uint8_t *buf, int32_t len);
 E_COM_PACKET_STATUS COM_sendResponse(uint8_t status, uint8_t *data, int32_t len);
 void COM_decodePackage(uint8_t *buf, int32_t len);

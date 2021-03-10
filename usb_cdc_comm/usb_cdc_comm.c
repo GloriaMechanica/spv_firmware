@@ -62,8 +62,15 @@ void USB_CDC_addDataToRxBuffer(uint8_t* buffer, uint32_t length)
 {
 	E_COM_PACKET_STATUS check;
 
+	// These are the first bytes on the empty buffer we received. From now on, we have
+	// at most one timeout period to receive a complete packet, otherwise its tossed away.
+	if (usb_cdc_rx_buffer.top == 0)
+		COM_startTimeout();
+
+	// Drop stuff if buffer is full already
 	if (usb_cdc_rx_buffer.top + length > USB_CDC_RX_BUFFER_SIZE)
 		return;
+
 
 	memcpy(&usb_cdc_rx_buffer.data[usb_cdc_rx_buffer.top], buffer, length);
 	usb_cdc_rx_buffer.top += length;
@@ -72,20 +79,13 @@ void USB_CDC_addDataToRxBuffer(uint8_t* buffer, uint32_t length)
 
 	if (check == COM_PACKET_VALID)
 	{
+		COM_stopTimeout();
 		usb_cdc_rx_buffer.packet_in_buffer = 1;
+		dbgprintf("Valid Packet in Buffer");
+		dbgprintbuf(usb_cdc_rx_buffer.data, usb_cdc_rx_buffer.top);
 	}
-	else if (check == COM_PACKET_SMALLER_MINIMAL_LENGTH)
-	{
-		COM_restartTimeout();
-	}
-	else
-	{
-		// Any other error -> respond with NACK
-		usb_cdc_rx_buffer.packet_in_buffer = -1;
-	}
-
 	dbgprintf("Buffer status: %d check: %d", usb_cdc_rx_buffer.top, check);
-	dbgprintbuf(usb_cdc_rx_buffer.data, usb_cdc_rx_buffer.top);
+
 }
 
 /** @brief Clears the receive buffer

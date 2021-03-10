@@ -45,9 +45,6 @@ void COM_update (void)
 		// There is a good packet in the buffer -> decode and execute it
 		COM_decodePackage(&(usb_cdc_rx_buffer.data[COMM_COMMAND_POSITION]), usb_cdc_rx_buffer.top - (COM_MIN_PACKET_LEN));
 
-		// DEBUG
-		//SM_restart_testcylce();
-
 		// Clear the buffer at the end, so that new commands are correctly interpreted
 		USB_CDC_clearRxBuffer();
 	}
@@ -64,7 +61,7 @@ void COM_update (void)
  *			It needs to be passed a stripped package containing
  *			only the command and the data bytes!
  *
- *  @param *buf - pointer to buffer, where buf[0] is CMD, the rest is data
+ *  @param *buf - pointer to buffer, where buf[0] is CMD, the rest is data (CRC is excluded already)
  *  @param len - lenth of data field. len = number of data bytes + 1 command byte
  *  @return (none)
  */
@@ -134,8 +131,44 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 			}
 		}
 		COM_sendResponse(ACK, data, (int)(ptr - &(data[0])));
+	}
+	// -----------------------------------------------------
+	else if (command == COMM_SENDDATAPOINTS)
+	{
+		dbgprintf("Got some datapoints...");
+		int i = 1;
+		int channel_nr = 0;
+		int number_points = 0;
+		// I admit, not so much overflow checking is done here.
+		// But we do not expect hackers to do something bad between the PC and the SPV
+		// and the python program should provide the correct field lengths etc.
+		while(i < len)
+		{
+			channel_nr = buf[i++];
+			number_points = buf[i++];
+			if (channel_nr >= 0 && channel_nr < CHA_NUMBER_CHANNELS_TOTAL)
+			{
+				CHA_pushDatapoints(cha_list[channel_nr], &(buf[i]), number_points);
+				i += (cha_list[channel_nr])->ellen * number_points;
+				dbgprintf("Added %d points of length %d to channel %d", number_points, (cha_list[channel_nr])->ellen, channel_nr);
+			}
 
-		SM_restart_testcylce(); // JUST FOR DEBUG
+		}
+		COM_sendResponse(ACK, NULL, 0);
+	}
+	// -----------------------------------------------------
+	else if (command == COMM_STARTPLAYING)
+	{
+		dbgprintf("Start Playing command!");
+		SM_startPlaying();
+		COM_sendResponse(ACK, NULL, 0);
+	}
+	// -----------------------------------------------------
+	else if (command == COMM_CLEARCHANNELS)
+	{
+		dbgprintf("Clear all channels");
+		CHA_Init();
+		COM_sendResponse(ACK, NULL, 0);
 	}
 	// -----------------------------------------------------
 	else
@@ -160,6 +193,7 @@ void COM_updateTimeout (void)
 	{
 		comm.timeout = 0;
 		USB_CDC_clearRxBuffer();
+		dbgprintf("Receive Timeout expired. Tossed away packet!");
 	}
 }
 
@@ -170,7 +204,7 @@ void COM_updateTimeout (void)
  *  @param (none)
  *  @return (none)
  */
-void COM_restartTimeout (void)
+void COM_startTimeout (void)
 {
 	comm.timeout = COM_PACKET_TIMEOUT;
 }
@@ -182,7 +216,7 @@ void COM_restartTimeout (void)
  */
 void COM_stopTimeout (void)
 {
-	comm.timeout = COM_PACKET_TIMEOUT;
+	comm.timeout = 0;
 }
 
 /** @brief 	Is periodically called from the main loop and checks if new
@@ -213,8 +247,6 @@ E_COM_PACKET_STATUS COM_checkIfPacketValid(uint8_t *buf, int32_t len)
 	crc_send = buf[len-2] << 8 | buf[len-1];
 	crc_calc = crc16(buf, len-2); // len-2 because CRC bytes are not included in calculation
 
-	dbgprintf("len: %d", packet_len);
-
 	dbgprintf("crc send: %02X vs. calculated %02X", crc_send, crc_calc);
 
 	if (packet_len > len)
@@ -223,6 +255,8 @@ E_COM_PACKET_STATUS COM_checkIfPacketValid(uint8_t *buf, int32_t len)
 		return COM_PACKET_TOO_LONG;
 	else if (crc_send != crc_calc)
 		return COM_PACKET_CRC_ERROR;
+
+	dbgprintf("packet says len= %d", packet_len);
 
 	return COM_PACKET_VALID;
 }
