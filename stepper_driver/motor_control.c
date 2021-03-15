@@ -92,27 +92,19 @@ void SM_restart_testcylce (void)
 	dbgprintf(" RESTART testcycle at t=%d", CHA_getChannelTime());
 }
 
-/** @brief  Starts playing off channel data. Time is initialized to 0
- *  @param 	(none)
- *  @return (none)
- */
-void SM_startPlaying (void)
-{
-	CHA_setChannelTime(0);
-	CHA_startTime();
-	dbgprintf("START playing channel data at t=%d", CHA_getChannelTime());
-}
-
-/** @brief  Immediately shuts the motor off.
+/** @brief  Immediately forces all motor axis to stop.
  *  @param 	(none)
  *  @return (none)
  */
 void SM_hardstop (void)
 {
-
+	STG_hardstop(&x_dae_motor);
+	STG_hardstop(&y_dae_motor);
+	STG_hardstop(&z_dae_motor);
+	// (add more axis here if they exist)
 }
 
-/** @brief  Call when time reached the timestamp of the first element in the channel buffer.
+/** @brief  Call when it is due to execute a datapoint. The is always stopped when this function is executed
  *  @param 	(none)
  *  @return (none)
  */
@@ -211,7 +203,6 @@ int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha)
 				ctl->status = STG_PREPARED;
 				STG_StartCycle(ctl);
 			}
-
 		}
 		else if (ctl->status == STG_NOT_PREPARED)
 		{
@@ -324,7 +315,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 	if (delta_t0 < 0 || delta_t1 < 0)
 	{
 		// negative times are crap. Stop stepper and report error
-		dbgprintfc(dbp, "Input error: negative times");
+		dbgprintfc(1, "Input error: negative times");
 		ctl->waiting = &stepper_shutoff;
 		return 0;
 	}
@@ -460,7 +451,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 			if (-R_ERR < b0 && b0 < R_ERR) // Means b0 == 0
 			{
 				// Speed cannot be calculated
-				dbgprintfc(dbp, "ERROR: Linear 0 (loop %d)", i);
+				dbgprintfc(1, "ERROR: Linear 0 (loop %d)", i);
 				return W_ERR;
 			}
 			else
@@ -479,7 +470,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 			}
 			else
 			{
-				dbgprintfc(dbp, "ERROR: Root 0 (loop %d)", i);
+				dbgprintfc(1, "ERROR: Root 0 (loop %d)", i);
 				return W_ERR;
 			}
 		}
@@ -490,7 +481,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 			if (-R_ERR < b1 && b1 < R_ERR) // Means b0 == 0
 			{
 				// Speed cannot be calculated
-				dbgprintfc(dbp, "ERROR: Linear 1 (loop %d)", i);
+				dbgprintfc(1, "ERROR: Linear 1 (loop %d)", i);
 				return W_ERR;
 			}
 			else
@@ -509,7 +500,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 			}
 			else
 			{
-				dbgprintfc(dbp, "ERROR: Root 1 (loop %d)", i);
+				dbgprintfc(1, "ERROR: Root 1 (loop %d)", i);
 				return W_ERR;
 			}
 		}
@@ -568,7 +559,7 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 	}
 	else
 	{
-		dbgprintfc(dbp, "ERROR: Found nothing possible! (w_m = %f)", w_m_f);
+		dbgprintfc(1, "ERROR: Found nothing possible! (w_m = %f)", w_m_f);
 		ctl->waiting = &stepper_shutoff;
 		return 0;
 	}

@@ -78,6 +78,48 @@ void CHA_Init(void)
 	cha_str_dae.last_point_time = 0;
 }
 
+/** @brief  Starts playing off channel data. Time is initialized to 0
+ *  @param 	(none)
+ *  @return (none)
+ */
+void CHA_startPlaying (void)
+{
+	CHA_setChannelTime(0);
+	CHA_setRelativeExecutionTime(0);
+	CHA_startTime();
+	dbgprintf("START playing channel data at t=%d", CHA_getChannelTime());
+}
+
+/** @brief  Stops execution of new channel events. The current ones are not interrupted by this command
+ *  @param 	(none)
+ *  @return (none)
+ */
+void CHA_stopPlaying (void)
+{
+	CHA_stopTime();
+	dbgprintf("STOP playing channel data at t=%d", CHA_getChannelTime());
+	CHA_setChannelTime(0);
+}
+
+/** @brief  Datapoints in channels are relative. They start if the difference of current time
+ * 			minus the time where the last event happened is the specified delay. But what to
+ * 			do with the first datapoint? It is executed after the parameter "time" of this
+ * 			function is executed.
+ *
+ * 			The most sensible argument for this function is 0 - the axis should start
+ * 			right after startPlaying has been issued.
+ *
+ *  @param 	time - time from the startPlaying command after which the channels are executed
+ *  @return (none)
+ */
+void CHA_setRelativeExecutionTime(uint32_t time)
+{
+	cha_e_note.last_point_time = 0;
+	cha_posx_dae.last_point_time = 0;
+	cha_posy_dae.last_point_time = 0;
+	cha_str_dae.last_point_time = 0;
+}
+
 /** @brief 	Pushes count elements that can be found in *in on the channel buffer
  * 			with handle *cha
  *

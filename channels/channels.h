@@ -94,6 +94,9 @@ uint32_t CHA_getChannelTime(void);
 int32_t CHA_getIfTimeActive (void);
 void CHA_startTime (void);
 void CHA_stopTime (void);
+void CHA_startPlaying (void);
+void CHA_stopPlaying (void);
+void CHA_setRelativeExecutionTime(uint32_t time);
 
 
 

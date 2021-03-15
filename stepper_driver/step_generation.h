@@ -94,7 +94,7 @@ typedef struct
 	T_ISR_CONTROL 	ctl_swap[2]; // This is the memory allocation for active and waiting structs. In active and waiting, there are the pointers of those two
 	T_ISR_CONTROL* 	active;
 	T_ISR_CONTROL* 	waiting;
-	E_STG_EXECUTION_STATUS	status; // reads 1 of the motor is currently self-following a trajectory. If it is paused, it reads 0.
+	E_STG_EXECUTION_STATUS	status; // State machine status. Running, Idle, prepared, error... see definition
 }T_MOTOR_CONTROL;
 
 // Global stepper state variables
@@ -108,6 +108,7 @@ void isr_update_stg (T_MOTOR_CONTROL *ctl, uint16_t tim_cnt);
 void STG_Init (void);
 void STG_swapISRcontrol (T_MOTOR_CONTROL *ctl);
 void STG_StartCycle(T_MOTOR_CONTROL *ctl);
+void STG_hardstop (T_MOTOR_CONTROL *ctl);
 
 #endif // STEP_GENERATION_H_
 

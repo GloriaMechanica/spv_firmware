@@ -34,6 +34,6 @@ void SM_Init(void);
 void SM_setMotorReady (T_MOTOR_CONTROL *ctl);
 int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha);
 void SM_restart_testcylce (void);
-void SM_startPlaying (void);
+void SM_hardstop (void);
 
 # endif // MOTOR_CONTROL_H_

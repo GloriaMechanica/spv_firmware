@@ -160,7 +160,15 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 	else if (command == COMM_STARTPLAYING)
 	{
 		dbgprintf("Start Playing command!");
-		SM_startPlaying();
+		CHA_startPlaying();
+		COM_sendResponse(ACK, NULL, 0);
+	}
+	// -----------------------------------------------------
+	else if (command == COMM_STOPPLAYING)
+	{
+		dbgprintf("Stop Playing command!");
+		CHA_stopPlaying();
+		SM_hardstop();
 		COM_sendResponse(ACK, NULL, 0);
 	}
 	// -----------------------------------------------------
