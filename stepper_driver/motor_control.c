@@ -11,6 +11,7 @@
 #include "motor_control.h"
 #include "timekeeper.h"
 #include <math.h>
+#include <stdlib.h>
 
 // Debug-only stuff
 int32_t test_positions_xy[TEST_POINTS] = {0, 	500, 	500, 	1550, 	250, 	2000, 	0, 		100, 		0};
@@ -93,6 +94,9 @@ void SM_restart_testcylce (void)
 }
 
 /** @brief  Immediately forces all motor axis to stop.
+ * 			Be careful! This might loose some steps, so only use this
+ * 			for emergencies or if step lost does not matter.
+ * 			Use SM_softstop() normally
  *  @param 	(none)
  *  @return (none)
  */
@@ -102,6 +106,18 @@ void SM_hardstop (void)
 	STG_hardstop(&y_dae_motor);
 	STG_hardstop(&z_dae_motor);
 	// (add more axis here if they exist)
+}
+
+/** @brief  Immediately slow down all motor axis with maximum
+ * 			deceleration. This function does not loose steps.
+ *  @param 	(none)
+ *  @return (none)
+ */
+void SM_softstop (void)
+{
+	STG_softstop(&x_dae_motor);
+	STG_softstop(&y_dae_motor);
+	STG_softstop(&z_dae_motor);
 }
 
 /** @brief  Call when it is due to execute a datapoint. The is always stopped when this function is executed
@@ -115,6 +131,58 @@ void SM_setMotorReady (T_MOTOR_CONTROL *ctl)
 	ctl->motor.scheduled_pos = ctl->motor.pos;
 
 	ctl->status = STG_READY;
+}
+
+/** @brief  Moves a motor to a fixed step location and stops there.
+ * 			It does this at the given speed. However, depending on the cycle,
+ * 			it is not clear wheter it will ever reach speed without going too far.
+ *
+ * 			It expects the motor to sit in the STG_IDLE state. If not, the command
+ * 			is just ignored.
+ *
+ *  @param 	*ctl - Pointer to motor control handle
+ *  @param	position - location in steps that it should move to
+ *  @param 	speed - speed in [rad/s] that it should perform this task
+ *  @return (none)
+ */
+void SM_moveMotorToLocation(T_MOTOR_CONTROL *ctl, int32_t position, real speed)
+{
+	int32_t delta_s = position-ctl->motor.pos;
+	dbgprintf("MM pos=%d speed=%d", position, (int)speed);
+	int32_t delta_t = SM_calculate_minimal_time(delta_s, 0.0, 0.0, speed, &(ctl->motor));
+	T_SPT_CYCLESPEC setup;
+	real w_ret = 0.0;
+
+	if (ctl->status == STG_IDLE)
+	{
+		// And extract the difference between datapoints and pass them over to the motor calculator
+		setup.delta_s0 = delta_s;
+		setup.delta_t0 = delta_t;
+		setup.delta_s1 = 0;
+		setup.delta_t1 = 100;
+
+		ctl->motor.scheduled_pos = position;
+
+		// This is a new self-following trajectory to start. The motor has not been moving previously
+		setup.w_s = 0; // this is the start of a new trajectory, so start speed is 0
+		dbgprintf("%s Start manual move of %d steps in delta_t=%d: ",ctl->name, delta_s, delta_t);
+		w_ret = calculate_motor_control(&setup, ctl);
+		if (w_ret == W_ERR)
+		{
+			// Could not fit the motion request
+			ctl->status = STG_ERROR;
+			dbgprintf("%s CALCULATION ERROR!", ctl->name);
+		}
+		else
+		{
+			ctl->status = STG_MANUAL;
+			STG_StartCycle(ctl);
+		}
+	}
+	else
+	{
+		dbgprintf("Skipped manual move command because motor was busy!");
+	}
 }
 
 
@@ -608,28 +676,71 @@ real calculate_motor_control (T_SPT_CYCLESPEC *setup, T_MOTOR_CONTROL *ctl)
 	return w_m_f;
 }
 
-/*	// A demo configuration.
-	ctl->waiting->c = C_MAX*FACTOR;
-	ctl->waiting->c_hw = C_MAX;
-	ctl->waiting->c_0 = 1279158;
-	ctl->waiting->c_t = 61751; // Factor included
-	ctl->waiting->c_ideal = 125000;
-	ctl->waiting->c_real = 0;
-	ctl->waiting->s = 0;
-	ctl->waiting->s_total = 1000;
-	ctl->waiting->s_on = 107;
-	ctl->waiting->s_off = 892;
-	ctl->waiting->n = 0;
-	ctl->waiting->neq_on = 0;
-	ctl->waiting->neq_off = -108;
-	ctl->waiting->shutoff = 0;
-	ctl->waiting->running = 0; // cycle is not activated yet
-	ctl->waiting->no_accel = 0;
-	ctl->waiting->out_state = 0;
-	ctl->waiting->dir_abs = toggledir;  // maybe toggle here at some point.
-	ctl->waiting->d_on = 1;
-	ctl->waiting->d_off = -1;
+/** @brief 	Calculates the minimum time that a motor will need to perform
+ * 			a given delta_s with given maximal speed
+ *
+ *  @param delta_s - number of steps it should perform (always counted positive
+ *  @param w_start - start speed [rad/s] of this cycle (usually 0, but can be looked after here)
+ *  @param w_end - speed [rad/s] that the motor should have at the end of this cycle
+ *  @param w_max - maximal allowed target speed (if many steps are required, it will mostly travel at this speed)
+ *  @param *motor - motor status struct used to extract info about possible acceleration etc.
+ *  @return minimal time in ms if successful. 0 if not possible or anything else
  */
+int32_t SM_calculate_minimal_time (int32_t delta_s, real w_start, real w_stop, real w_max, T_STEPPER_STATE *motor)
+{
+	real acc = motor->acc;
+	real alpha = motor->alpha;
+	real w_motor_max = motor->w_max;
+	real delta_theta, delta_theta1, delta_theta3;
+	real delta_t1, delta_t3, t_min;
+	int32_t t_min_int;
+	real w_m;
+
+	// Some sanity checking on the input
+	if (fabs(w_start) > w_motor_max || fabs(w_stop) > w_motor_max || fabs(w_max) > w_motor_max)
+	{
+		dbgprintf("Required silly start/stop speeds!");
+		return 0;
+	}
+
+	if (w_max == 0.0)
+		return 0;
+
+	if (delta_s == 0)
+		return 0;
+
+	delta_theta = abs(delta_s) * alpha;
+	delta_t1 = (w_max - w_start)/acc;
+	delta_t3 = (w_max - w_stop)/acc;
+	delta_theta1 = delta_t1*delta_t1*acc/2;
+	delta_theta3 = delta_t3*delta_t3*acc/2;
+
+	// Now there are two possible cases: If there are enough steps, we can reach w_max
+	if (delta_theta < (delta_theta1 + delta_theta3))
+	{
+		// We cannot reach full speed
+		real disk = acc*delta_theta + w_start*w_start/2 + w_stop*w_stop/2;
+		if (disk > 0)
+			w_m = sqrt(disk);
+		else
+		{
+			dbgprintf("Minimum Time finding root error!");
+			return 0;
+		}
+
+		t_min = (2*w_m - w_start - w_stop)/acc;
+	}
+	else
+	{
+		t_min = delta_t1 + delta_t3 + (delta_theta - delta_theta1 - delta_theta3)/w_max;
+	}
+	t_min_int = ((int) (t_min*1000)) + 1; // always round towards larger value obviously
+
+	if (t_min_int > 0)
+		return t_min_int;
+	else
+		return 0;
+}
 
 /** @brief  Returns the smaller one of two values
  *
@@ -655,7 +766,28 @@ real max (real a, real b)
 	return b;
 }
 
-
+/*	// A demo configuration.
+	ctl->waiting->c = C_MAX*FACTOR;
+	ctl->waiting->c_hw = C_MAX;
+	ctl->waiting->c_0 = 1279158;
+	ctl->waiting->c_t = 61751; // Factor included
+	ctl->waiting->c_ideal = 125000;
+	ctl->waiting->c_real = 0;
+	ctl->waiting->s = 0;
+	ctl->waiting->s_total = 1000;
+	ctl->waiting->s_on = 107;
+	ctl->waiting->s_off = 892;
+	ctl->waiting->n = 0;
+	ctl->waiting->neq_on = 0;
+	ctl->waiting->neq_off = -108;
+	ctl->waiting->shutoff = 0;
+	ctl->waiting->running = 0; // cycle is not activated yet
+	ctl->waiting->no_accel = 0;
+	ctl->waiting->out_state = 0;
+	ctl->waiting->dir_abs = toggledir;  // maybe toggle here at some point.
+	ctl->waiting->d_on = 1;
+	ctl->waiting->d_off = -1;
+ */
 
 
 

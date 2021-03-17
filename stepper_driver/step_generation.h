@@ -24,6 +24,7 @@ typedef enum
 	STG_READY,		// Meaning the axis can start executing a new cycle because the timekeeper decided it needs to start now
 	STG_PREPARED,	// It has an active cycle running and the next one already prepared
 	STG_NOT_PREPARED,// It has an active cycle running, but the next one still needs to be calculated
+	STG_MANUAL,		// Motor is in manual moving mode. This means after each move, it goes to stop automatically
 	STG_ERROR,		// When a calculation error has been made, this motor stops.
 }E_STG_EXECUTION_STATUS;
 
@@ -109,6 +110,7 @@ void STG_Init (void);
 void STG_swapISRcontrol (T_MOTOR_CONTROL *ctl);
 void STG_StartCycle(T_MOTOR_CONTROL *ctl);
 void STG_hardstop (T_MOTOR_CONTROL *ctl);
+void STG_softstop (T_MOTOR_CONTROL *ctl);
 
 #endif // STEP_GENERATION_H_
 

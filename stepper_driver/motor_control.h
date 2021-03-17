@@ -35,5 +35,10 @@ void SM_setMotorReady (T_MOTOR_CONTROL *ctl);
 int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha);
 void SM_restart_testcylce (void);
 void SM_hardstop (void);
+void SM_softstop (void);
+int32_t SM_calculate_minimal_time (int32_t delta_s, real w_start, real w_stop, real w_max, T_STEPPER_STATE *motor);
+void SM_moveMotorToLocation(T_MOTOR_CONTROL *ctl, int32_t position, real speed);
+
+
 
 # endif // MOTOR_CONTROL_H_

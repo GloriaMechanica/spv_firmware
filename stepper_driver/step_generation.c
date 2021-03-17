@@ -233,6 +233,8 @@ void STG_StartCycle(T_MOTOR_CONTROL *ctl)
 }
 
 /** @brief 	Perfrom an immediate hard stop.
+ * 			Be careful! This function will, depending on the
+ * 			momentary speed of the motor, loose steps.
  *
  *  @param *ctl - Motor control struct to operate on.
  *  @return (none)
@@ -241,6 +243,53 @@ void STG_hardstop (T_MOTOR_CONTROL *ctl)
 {
 	ctl->active = &stepper_shutoff;
 	ctl->status = STG_IDLE;
+}
+
+/** @brief 	Perfrom an immediate soft stop. This function will
+ * 			overwrite the settings in the currently active isr swap
+ * 			to decelerate the motor as fast as possible.
+ *
+ *  @param *ctl - Motor control struct to operate on.
+ *  @return (none)
+ */
+void STG_softstop (T_MOTOR_CONTROL *ctl)
+{
+	real w_begin;
+	int32_t neq_begin;
+
+	// First determine current motor speed
+	w_begin = ctl->motor.alpha * F_TIMER / (ctl->active->c_hw);
+
+	// Then calculate the equivalent deceleration index (number of steps necessary to reach a stop)
+	neq_begin = - w_begin * w_begin / (2 * ctl->motor.alpha * ctl->motor.acc);
+
+	dbgprintf("Decel: neq begin: %d", neq_begin);
+
+	// The motor is currently moving at significant speed -> decel ramp needed
+	if (absolute(neq_begin) > 0)
+	{
+		ctl->active->s = 0;
+		ctl->active->s_total = absolute(neq_begin);
+		ctl->active->s_on = 0;
+		ctl->active->s_off = 0; // looks a bit scary putting s_on and s_off both at 0 (what is it gonna do, on or off?), but works if you look at the execution exactly
+		ctl->active->neq_on = 0; // never used
+		ctl->active->neq_off = neq_begin;
+		ctl->active->shutoff = 0; // Not shutoff yet
+		ctl->active->no_accel = 0; // Not the case here, we are moving relatively fast still
+		ctl->active->d_off = -1; // Thats important: We want to decelerate at the end.
+		ctl->active->w_finish = 0; // when we are finished, the motor stands still (not sure if anyone uses this variable, though)
+
+		// If this decel cycle is done, it will swap once again. It is important that shutoff is now in it so that it does not randomly tick along.
+		ctl->waiting = &stepper_shutoff;
+		ctl->status = STG_PREPARED; // meaning that we prepared stepper_shutoff as waiting
+	}
+	// The motor is currently moving very slow or not at all -> just put in stop swap.
+	else
+	{
+		ctl->active = &stepper_shutoff;
+		// This is important so it does not start when the next datapoint comes
+		ctl->status = STG_IDLE;
+	}
 }
 
 
@@ -290,6 +339,28 @@ void STG_swapISRcontrol (T_MOTOR_CONTROL *ctl)
 		ctl->active = &stepper_shutoff;
 		ctl->status = STG_IDLE;
 		dbgprintf("Swap ISR control: No waiting structure was found. Stopping.");
+	}
+	else if (ctl->status == STG_MANUAL)
+	{
+		// The manual move has just been started. Our prepared struct is in waiting.
+		ctl->active = ctl->waiting;
+		if (ctl->active->shutoff == 1)
+		{
+			if (ctl->active == &(ctl->ctl_swap[0]))
+			{
+				ctl->waiting = &(ctl->ctl_swap[1]);
+			}
+			else
+			{
+				ctl->waiting = &(ctl->ctl_swap[0]);
+			}
+			ctl->status = STG_IDLE;
+		}
+		else
+		{
+			ctl->waiting = &stepper_shutoff;
+			ctl->status = STG_PREPARED;
+		}
 	}
 }
 
@@ -412,7 +483,7 @@ void check_cycle_status(T_MOTOR_CONTROL *ctl)
  *
  * 			timer
  * 			channel
- * 			output pi
+ * 			output pin
  *  @param [in/out] *ctl - 	swap structure with both control structures
  *  @return (none)
  */
@@ -504,6 +575,18 @@ void isr_update_stg (T_MOTOR_CONTROL *ctl, uint16_t tim_cnt)
 		*(ctl->motor.hw.CCMR) &= ~(ctl->motor.hw.oc_mask);
 		*(ctl->motor.hw.CCMR) |= ctl->motor.hw.oc_forced_inactive_mask;
 	}
+
+}
+
+/** @brief 	Fills in a deceleration swap that allows to slow down the motor to
+ * 			a stop from whichever speed it is currently moving.
+ *
+ *  @param *ctl - Pointer to motor control handle for basically everything
+ *  @param *active - pointer to active ISR swap handle. Needed to extract the current speed.
+ *  @return (none)
+ */
+void calculate_decelerate_ramp (T_MOTOR_CONTROL *ctl)
+{
 
 }
 

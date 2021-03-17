@@ -168,7 +168,7 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 	{
 		dbgprintf("Stop Playing command!");
 		CHA_stopPlaying();
-		SM_hardstop();
+		SM_softstop();
 		COM_sendResponse(ACK, NULL, 0);
 	}
 	// -----------------------------------------------------
@@ -178,6 +178,36 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 		CHA_Init();
 		COM_sendResponse(ACK, NULL, 0);
 	}
+	// -----------------------------------------------------
+	else if (command == COMM_MOVECHANNELTO)
+	{
+		dbgprintf("Move Channel to");
+		uint8_t channel_nr = buf[1];
+		int32_t position = buf[3] << 8 | buf[2];
+		real speed = (double) buf[4];
+
+		dbgprintf("Should move to pos=%d at speed=%d", position, (int)speed);
+
+		if (channel_nr == CHA_E_NOTE_NR)
+		{
+			// TODO: Not implemented yet
+		}
+		else if (channel_nr == CHA_POSX_DAE_NR)
+		{
+			SM_moveMotorToLocation(&x_dae_motor, (int32_t) position, speed);
+		}
+		else if (channel_nr == CHA_POSY_DAE_NR)
+		{
+			SM_moveMotorToLocation(&y_dae_motor, (int32_t) position, speed);
+		}
+		else if (channel_nr == CHA_STR_DAE_NR)
+		{
+			SM_moveMotorToLocation(&z_dae_motor, (int32_t) position, speed);
+		}
+
+		COM_sendResponse(ACK, NULL, 0);
+	}
+
 	// -----------------------------------------------------
 	else
 	{
