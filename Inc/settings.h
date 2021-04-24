@@ -16,3 +16,5 @@
 
 #define 	SOFTWARE_ID_0				0x00
 #define 	SOFTWARE_ID_1				0x01
+
+#define 	DEBUG_ENABLE_UART_LOGGING	0

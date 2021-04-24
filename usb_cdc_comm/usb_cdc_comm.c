@@ -81,10 +81,14 @@ void USB_CDC_addDataToRxBuffer(uint8_t* buffer, uint32_t length)
 	{
 		COM_stopTimeout();
 		usb_cdc_rx_buffer.packet_in_buffer = 1;
+#if DEBUG_ENABLE_UART_LOGGING
 		dbgprintf("Valid Packet in Buffer");
 		dbgprintbuf(usb_cdc_rx_buffer.data, usb_cdc_rx_buffer.top);
+#endif
 	}
+#if DEBUG_ENABLE_UART_LOGGING
 	dbgprintf("Buffer status: %d check: %d", usb_cdc_rx_buffer.top, check);
+#endif
 
 }
 

@@ -67,8 +67,10 @@ void COM_update (void)
  */
 void COM_decodePackage(uint8_t *buf, int32_t len)
 {
+#if DEBUG_ENABLE_UART_LOGGING
 	dbgprintf("Command: %01X", buf[0]);
 	dbgprintf("Data length: %d", len);
+#endif
 	uint8_t command = buf[0];
 
 	// -----------------------------------------------------
@@ -100,8 +102,34 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 	// -----------------------------------------------------
 	else if (command == COMM_GETMACHINESTATUS)
 	{
-		dbgprintf("Get machine status is not implemented yet.");
-		COM_sendResponse(ACK, NULL, 0);
+		// PC requested the machine status (position and movement of all axis)
+		uint8_t data[COMM_STAT_AXISSTATUS_FIELD_SIZE];
+		uint8_t *ptr = &(data[0]);
+
+		T_MOTOR_CONTROL *axis[COMM_AXISSTATUS_AXIS];
+		axis[0] = &x_dae_motor;
+		axis[1] = &y_dae_motor;
+		axis[2] = &z_dae_motor;
+
+		T_CHANNEL *channels[COMM_AXISSTATUS_AXIS];
+		channels[0] = &cha_posx_dae;
+		channels[1] = &cha_posy_dae;
+		channels[2] = &cha_str_dae;
+
+		int i;
+		for (i = 0; i < 3; i++)
+		{
+			*(ptr++) = COMM_STAT_AXISSTATUS_TAG;
+			*(ptr++) = COMM_STAT_AXISSTATUS_LEN;
+			*(ptr++) = channels[i]->channel_number;
+			*(ptr++) = axis[i]->motor.scheduled_pos == axis[i]->motor.pos ? 0x00 : 0x01;
+			*(ptr++) = (axis[i]->motor.pos) & 0x00FF;
+			*(ptr++) = (axis[i]->motor.pos >> 8) & 0x00FF;
+		}
+
+		// DO NOT FORGET to adapt COMM_STAT_AXISSTATUS_FIELD_SIZE when adding new status fields here.
+
+		COM_sendResponse(ACK, data, sizeof(data));
 	}
 	// -----------------------------------------------------
 	else if (command == COMM_REQUESTCHANNELFILL)
@@ -207,7 +235,6 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 
 		COM_sendResponse(ACK, NULL, 0);
 	}
-
 	// -----------------------------------------------------
 	else
 	{
@@ -284,8 +311,9 @@ E_COM_PACKET_STATUS COM_checkIfPacketValid(uint8_t *buf, int32_t len)
 	packet_len = buf[2] << 8 | buf[3];
 	crc_send = buf[len-2] << 8 | buf[len-1];
 	crc_calc = crc16(buf, len-2); // len-2 because CRC bytes are not included in calculation
-
+#if DEBUG_ENABLE_UART_LOGGING
 	dbgprintf("crc send: %02X vs. calculated %02X", crc_send, crc_calc);
+#endif
 
 	if (packet_len > len)
 		return COM_PACKET_TOO_SHORT;
@@ -293,8 +321,9 @@ E_COM_PACKET_STATUS COM_checkIfPacketValid(uint8_t *buf, int32_t len)
 		return COM_PACKET_TOO_LONG;
 	else if (crc_send != crc_calc)
 		return COM_PACKET_CRC_ERROR;
-
+#if DEBUG_ENABLE_UART_LOGGING
 	dbgprintf("packet says len= %d", packet_len);
+#endif
 
 	return COM_PACKET_VALID;
 }
