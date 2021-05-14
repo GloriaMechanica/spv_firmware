@@ -90,12 +90,13 @@ typedef struct
 // One of these for every motor. Contains all the information for this particular motor
 typedef struct
 {
-	char* 			name; 	// Pointer to string where name of motor is stored. Used to print out which motor it was in routines where only the handle is given.
+	char* 			name; 			// Pointer to string where name of motor is stored. Used to print out which motor it was in routines where only the handle is given.
 	T_STEPPER_STATE	motor;
-	T_ISR_CONTROL 	ctl_swap[2]; // This is the memory allocation for active and waiting structs. In active and waiting, there are the pointers of those two
+	T_ISR_CONTROL 	ctl_swap[2]; 	// This is the memory allocation for active and waiting structs. In active and waiting, there are the pointers of those two
 	T_ISR_CONTROL* 	active;
 	T_ISR_CONTROL* 	waiting;
 	E_STG_EXECUTION_STATUS	status; // State machine status. Running, Idle, prepared, error... see definition
+	int32_t slow_decel_at_limit; 	// Should usually be set to 0. If set to non-zero, the motor makes a soft stop when running in the limit. This is used for referencing as it is assumed that at a hardstop, it looses steps.
 }T_MOTOR_CONTROL;
 
 // Global stepper state variables

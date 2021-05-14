@@ -19,6 +19,7 @@
 #include "step_generation.h"
 #include "motor_parameters.h"
 #include <math.h>
+#include <string.h>
 
 int32_t 	c_table_xy[C_TABLE_SIZE]; 		// contains timer preload values for each acceleration index n for all x and y axis
 int32_t 	c_table_z[C_TABLE_SIZE]; 		// Contains timer preload values for each acceleration index n for both z-axis
@@ -59,6 +60,7 @@ void STG_Init (void)
 
 	// Init X_DAE motor
 	x_dae_motor.name = x_dae_name;
+	x_dae_motor.slow_decel_at_limit = 0;
 	x_dae_motor.motor.hw.flip_dir = X_DAE_HW_FLIP_DIR;
 	x_dae_motor.motor.hw.dir_port = X_DAE_HW_DIR_PORT;
 	x_dae_motor.motor.hw.dir_pin = X_DAE_HW_DIR_PIN;
@@ -74,6 +76,7 @@ void STG_Init (void)
 
 	// Init Y_DAE motor
 	y_dae_motor.name = y_dae_name;
+	y_dae_motor.slow_decel_at_limit = 0;
 	y_dae_motor.motor.hw.flip_dir = Y_DAE_HW_FLIP_DIR;
 	y_dae_motor.motor.hw.dir_port = Y_DAE_HW_DIR_PORT;
 	y_dae_motor.motor.hw.dir_pin = Y_DAE_HW_DIR_PIN;
@@ -89,6 +92,7 @@ void STG_Init (void)
 
 	// Init Z_DAE motor
 	z_dae_motor.name = z_dae_name;
+	z_dae_motor.slow_decel_at_limit = 0;
 	z_dae_motor.motor.hw.flip_dir = Z_DAE_HW_FLIP_DIR;
 	z_dae_motor.motor.hw.dir_port = Z_DAE_HW_DIR_PORT;
 	z_dae_motor.motor.hw.dir_pin = Z_DAE_HW_DIR_PIN;
@@ -344,21 +348,22 @@ void STG_swapISRcontrol (T_MOTOR_CONTROL *ctl)
 	{
 		// The manual move has just been started. Our prepared struct is in waiting.
 		ctl->active = ctl->waiting;
-		if (ctl->active->shutoff == 1)
+		if (ctl->active == &(ctl->ctl_swap[0]))
 		{
-			if (ctl->active == &(ctl->ctl_swap[0]))
-			{
-				ctl->waiting = &(ctl->ctl_swap[1]);
-			}
-			else
-			{
-				ctl->waiting = &(ctl->ctl_swap[0]);
-			}
+			ctl->waiting = &(ctl->ctl_swap[1]);
+		}
+		else
+		{
+			ctl->waiting = &(ctl->ctl_swap[0]);
+		}
+
+		if (ctl->active->shutoff == 1)
+		{ // This is a weired case that should not occur. If we do a manual move, it should not just stop
 			ctl->status = STG_IDLE;
 		}
 		else
 		{
-			ctl->waiting = &stepper_shutoff;
+			ctl->waiting->shutoff = 1; // Prepare the next struct, which in this case does nothing but stop the motor.
 			ctl->status = STG_PREPARED;
 		}
 	}
@@ -587,6 +592,8 @@ void isr_update_stg (T_MOTOR_CONTROL *ctl, uint16_t tim_cnt)
  */
 void calculate_decelerate_ramp (T_MOTOR_CONTROL *ctl)
 {
+	// Not sure what I wanted to do with it. Maybe make commands a bit more orderly.
+	// For now, just stays as a dummy as softstop is already implemented.
 
 }
 

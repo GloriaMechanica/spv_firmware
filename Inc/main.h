@@ -106,10 +106,13 @@ void Error_Handler(void);
 #define STLK_TX_GPIO_Port GPIOD
 #define LIMIT_X_DAE_Pin GPIO_PIN_10
 #define LIMIT_X_DAE_GPIO_Port GPIOD
+#define LIMIT_X_DAE_EXTI_IRQn EXTI15_10_IRQn
 #define LIMIT_Y_DAE_Pin GPIO_PIN_11
 #define LIMIT_Y_DAE_GPIO_Port GPIOD
+#define LIMIT_Y_DAE_EXTI_IRQn EXTI15_10_IRQn
 #define LIMIT_Z_DAE_Pin GPIO_PIN_12
 #define LIMIT_Z_DAE_GPIO_Port GPIOD
+#define LIMIT_Z_DAE_EXTI_IRQn EXTI15_10_IRQn
 #define USB_PowerSwitchOn_Pin GPIO_PIN_6
 #define USB_PowerSwitchOn_GPIO_Port GPIOG
 #define USB_OverCurrent_Pin GPIO_PIN_7
