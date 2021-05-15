@@ -22,10 +22,21 @@
 #define XY_SPEED_MAX			(50.0F)		// maximal speed on this axis [rad/sec]
 #define XY_ALPHA				((double) 2 * PI / (XY_STEPS_PER_REV * XY_STEP_MODE))	// This thing is used sometimes, easier that way
 
+// Homing parameters
+#define RETRACTING_DISTANCE			50 		// Number of steps it retracts after first contact
+#define SECOND_CONTACT_DISTANCE		-100	// Number of steps it moves towards limit switch again for second contact
+#define SECOND_CONTACT_SPEED		2		// speed it makes the second contact (in rad/s)
+
 // -------- DAE apparatus -------------------------
 #define TIMER1_CHANNEL1_MOTOR				(&x_dae_motor)
+#define X_DAE_MAX_TRAVEL					1000 // maximal number of steps the axis should be able to move
+
 #define TIMER1_CHANNEL2_MOTOR				(&y_dae_motor)
+#define Y_DAE_MAX_TRAVEL					1000 // maximal number of steps the axis should be able to move
+
 #define TIMER1_CHANNEL3_MOTOR				(&z_dae_motor)
+#define Z_DAE_MAX_TRAVEL					8000 // maximal number of steps the axis should be able to move
+
 
 // hardware mapping of X_DAE-motor
 #define X_DAE_HW_FLIP_DIR					1 // if -1, it changes direction

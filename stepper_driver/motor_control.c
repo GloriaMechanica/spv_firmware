@@ -9,6 +9,7 @@
 #include "main.h"
 #include "debug_tools.h"
 #include "motor_control.h"
+#include "motor_parameters.h"
 #include "timekeeper.h"
 #include <math.h>
 #include <stdlib.h>
@@ -135,20 +136,20 @@ void SM_setMotorReady (T_MOTOR_CONTROL *ctl)
 
 /** @brief  Moves a motor to a fixed step location and stops there.
  * 			It does this at the given speed. However, depending on the cycle,
- * 			it is not clear wheter it will ever reach speed without going too far.
+ * 			it is not clear whether it will ever reach speed without going too far.
  *
  * 			It expects the motor to sit in the STG_IDLE state. If not, the command
- * 			is just ignored.
+ * 			is just ignored. (not buffered or anything!)
  *
  *  @param 	*ctl - Pointer to motor control handle
  *  @param	position - location in steps that it should move to
  *  @param 	speed - speed in [rad/s] that it should perform this task
  *  @return (none)
  */
-void SM_moveMotorToLocation(T_MOTOR_CONTROL *ctl, int32_t position, real speed)
+uint8_t SM_moveMotorToLocation(T_MOTOR_CONTROL *ctl, int32_t position, real speed)
 {
 	int32_t delta_s = position-ctl->motor.pos;
-	dbgprintf("MM pos=%d speed=%d", position, (int)speed);
+	dbgprintf("MM abs pos=%d speed=%d", position, (int)speed);
 	int32_t delta_t = SM_calculate_minimal_time(delta_s, 0.0, 0.0, speed, &(ctl->motor));
 	T_SPT_CYCLESPEC setup;
 	real w_ret = 0.0;
@@ -172,19 +173,100 @@ void SM_moveMotorToLocation(T_MOTOR_CONTROL *ctl, int32_t position, real speed)
 			// Could not fit the motion request
 			ctl->status = STG_ERROR;
 			dbgprintf("%s CALCULATION ERROR!", ctl->name);
+			return ERROR;
 		}
 		else
 		{
 			ctl->status = STG_MANUAL;
 			STG_StartCycle(ctl);
+			return SUCCESS;
 		}
 	}
 	else
 	{
 		dbgprintf("Skipped manual move command because motor was busy!");
+		return ERROR;
 	}
 }
 
+
+/** @brief  Moves a motor by a fixed difference in steps and stops there.
+ * 			It does this at the given speed. However, depending on the cycle,
+ * 			it is not clear whether it will ever reach speed without going too far.
+ *
+ * 			It expects the motor to sit in the STG_IDLE state. If not, the command
+ * 			is just ignored. (not buffered or anything!)
+ *
+ *  @param 	*ctl - Pointer to motor control handle
+ *  @param	position_difference - difference in steps it should move
+ *  @param 	speed - speed in [rad/s] that it should perform this task
+ *  @return SUCCESS if possible, ERROR if motor not ready
+ */
+uint8_t SM_moveMotorRelative(T_MOTOR_CONTROL *ctl, int32_t position_difference, real speed)
+{
+	int32_t delta_s = position_difference;
+	dbgprintf("MM rel pos_diff=%d speed=%d", position_difference, (int)speed);
+	int32_t delta_t = SM_calculate_minimal_time(delta_s, 0.0, 0.0, speed, &(ctl->motor));
+	T_SPT_CYCLESPEC setup;
+	real w_ret = 0.0;
+
+	if (ctl->status == STG_IDLE)
+	{
+		// And extract the difference between datapoints and pass them over to the motor calculator
+		setup.delta_s0 = delta_s;
+		setup.delta_t0 = delta_t;
+		setup.delta_s1 = 0;
+		setup.delta_t1 = 100;
+
+		ctl->motor.scheduled_pos = ctl->motor.pos + position_difference;
+
+		// This is a new self-following trajectory to start. The motor has not been moving previously
+		setup.w_s = 0; // this is the start of a new trajectory, so start speed is 0
+		dbgprintf("%s Start manual move of %d steps in delta_t=%d: ",ctl->name, delta_s, delta_t);
+		w_ret = calculate_motor_control(&setup, ctl);
+		if (w_ret == W_ERR)
+		{
+			// Could not fit the motion request
+			ctl->status = STG_ERROR;
+			dbgprintf("%s CALCULATION ERROR!", ctl->name);
+			return ERROR;
+		}
+		else
+		{
+			ctl->status = STG_MANUAL;
+			STG_StartCycle(ctl);
+			return SUCCESS;
+		}
+	}
+	else
+	{
+		dbgprintf("Skipped manual move command because motor was busy!");
+		return ERROR;
+	}
+}
+
+/** @brief  Moves a motor in the negative direction until it (hopefully!)
+ * 			Hits a limit switch. If so, it retacts a few millimeters and
+ * 			approaches the limit switch a second time more slowly to establish
+ * 			the exact zero.
+ *
+ * 			It expects the motor to sit in the STG_IDLE state. If not, the command
+ * 			is just ignored. (not buffered or anything!)
+ *
+ *  @param 	*ctl - Pointer to motor control handle
+ *  @param 	speed - speed at which the first homing run is performed (in rad/s)
+ *  @return (none)
+ */
+void SM_referenceMotor(T_MOTOR_CONTROL *ctl, real speed)
+{
+	uint8_t ret;
+	ret = SM_moveMotorRelative(ctl, -(ctl->motor.max_travel), speed);
+	if (ret == SUCCESS)
+	{
+	 ctl->motor.home_status = STG_WAITING_FIRST_CONTACT;
+	}
+	 // All the rest is done by the state machine and SM_updateMotor
+}
 
 /** @brief	Should be called periodically in the main loop for each motor.
  *
@@ -290,6 +372,25 @@ int32_t SM_updateMotor(T_MOTOR_CONTROL *ctl, T_CHANNEL *cha)
 			}
 			// Does not have to be started because the ISR will swap the waiting struct in at the right time itself
 		}
+	}
+
+	// Takes care of the referencing (homing) procedure.
+	if (ctl->motor.home_status == STG_AT_FIRST_CONTACT)
+	{
+		// Just waiting at the first contact-> move back to make the second
+		ctl->motor.home_status = STG_RETRACTING;
+		dbgprintf("Starting retracting move.");
+		SM_moveMotorRelative(ctl, RETRACTING_DISTANCE, SECOND_CONTACT_SPEED);
+	} else if (ctl->motor.home_status == STG_RETRACTING && ctl->status == STG_IDLE)
+	{
+		// retracting move has been completed. Moving towards it again.
+		ctl->motor.home_status = STG_WAITING_SECOND_CONTACT;
+		dbgprintf("Moving towards for second contact.");
+		SM_moveMotorRelative(ctl, SECOND_CONTACT_DISTANCE, SECOND_CONTACT_SPEED);
+	} else if (ctl->motor.home_status == STG_WAITING_SECOND_CONTACT && ctl->status == STG_IDLE)
+	{
+		dbgprintf("Failed to reference, no second contact could be made.");
+		ctl->motor.home_status = STG_NOT_HOME;
 	}
 
 	return ret;

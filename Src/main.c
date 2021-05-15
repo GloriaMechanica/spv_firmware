@@ -152,6 +152,8 @@ int main(void)
 
   notes_init();
 
+  dbgprintf("SPV ready and initialized.");
+
   /* USER CODE END 2 */
 
   /* Infinite loop */

@@ -28,6 +28,16 @@ typedef enum
 	STG_ERROR,		// When a calculation error has been made, this motor stops.
 }E_STG_EXECUTION_STATUS;
 
+typedef enum
+{
+	STG_NOT_HOME,				// directly after powerup, no home position was found
+	STG_HOME,					// this motor's position is accurate to the absolute machine position, it referenced successfully on the limits
+	STG_WAITING_FIRST_CONTACT,	// Currently moving towards the first contact with the limit switch
+	STG_AT_FIRST_CONTACT,		// This status is set when the motor hits the limit switch the first time.
+	STG_RETRACTING, 			// Moving back from first contact a bit
+	STG_WAITING_SECOND_CONTACT  // Currently moving towards the second contact with the limit switch
+}E_STG_HOME_STATUS;
+
 typedef struct
 {
 	int32_t			flip_dir;		// A final switch to reverse motor direction
@@ -54,7 +64,9 @@ typedef struct
 	int32_t			c_err; 			// Difference in actual and relative timer ticks (for correction)
 	int32_t 		overshoot_on; 	// Tracks how many ticks the overshoot-protection was active (for debug)
 	int32_t			overshoot_off; 	// same, but not for the acceleration overshoot, but for deceleration overshoot
+	int32_t 		max_travel; 	// Holds the number of steps of the whole range the motor is able to cover. Used for homing the axis
 	T_MOTOR_HW		hw;				// contains the mapping of this motor to the hardware (pins, timer registers ...)
+	E_STG_HOME_STATUS home_status;	// Holds the information whether this motor has found its home position or not, or if homing is ongoing.
 } T_STEPPER_STATE;
 
 // Contains information for ISR Setup of one cycle

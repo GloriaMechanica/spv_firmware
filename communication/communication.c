@@ -116,6 +116,8 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 		channels[1] = &cha_posy_dae;
 		channels[2] = &cha_str_dae;
 
+		int16_t pos;
+
 		int i;
 		for (i = 0; i < 3; i++)
 		{
@@ -123,8 +125,9 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 			*(ptr++) = COMM_STAT_AXISSTATUS_LEN;
 			*(ptr++) = channels[i]->channel_number;
 			*(ptr++) = axis[i]->motor.scheduled_pos == axis[i]->motor.pos ? 0x00 : 0x01;
-			*(ptr++) = (axis[i]->motor.pos) & 0x00FF;
-			*(ptr++) = (axis[i]->motor.pos >> 8) & 0x00FF;
+			pos = (axis[i]->motor.pos);
+			*(ptr++) =  pos & 0x00FF;
+			*(ptr++) = (pos >> 8) & 0x00FF;
 		}
 
 		// DO NOT FORGET to adapt COMM_STAT_AXISSTATUS_FIELD_SIZE when adding new status fields here.
@@ -234,6 +237,63 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 		}
 
 		COM_sendResponse(ACK, NULL, 0);
+	}
+	// -----------------------------------------------------
+	else if (command == COMM_MOVECHANNELRELATIVE)
+	{
+		dbgprintf("Move Channel relative");
+		uint8_t channel_nr = buf[1];
+		int16_t pos_diff = buf[3] << 8 | buf[2];
+		real speed = (double) buf[4];
+		uint8_t acknowledge = ACK;
+
+		dbgprintf("Should move by %d steps at speed=%d", pos_diff, (int)speed);
+
+		if (channel_nr == CHA_POSX_DAE_NR)
+		{
+			SM_moveMotorRelative(&x_dae_motor, pos_diff, speed);
+		}
+		else if (channel_nr == CHA_POSY_DAE_NR)
+		{
+			SM_moveMotorRelative(&y_dae_motor, pos_diff, speed);
+		}
+		else if (channel_nr == CHA_STR_DAE_NR)
+		{
+			SM_moveMotorRelative(&z_dae_motor, pos_diff, speed);
+		}
+		else
+		{
+			// This command is not supported for other channels
+			acknowledge = NACK;
+		}
+		COM_sendResponse(acknowledge, NULL, 0);
+	}
+	// -----------------------------------------------------
+	else if (command == COMM_REFERENCECHANNEL)
+	{
+		dbgprintf("Reference Channel");
+		uint8_t channel_nr = buf[1];
+		real speed = (double) buf[2];
+		uint8_t acknowledge = ACK;
+
+		if (channel_nr == CHA_POSX_DAE_NR)
+		{
+			SM_referenceMotor(&x_dae_motor, speed);
+		}
+		else if (channel_nr == CHA_POSY_DAE_NR)
+		{
+			SM_referenceMotor(&y_dae_motor, speed);
+		}
+		else if (channel_nr == CHA_STR_DAE_NR)
+		{
+			SM_referenceMotor(&z_dae_motor, speed);
+		}
+		else
+		{
+			// This command is not supported for other channels
+			acknowledge = NACK;
+		}
+		COM_sendResponse(acknowledge, NULL, 0);
 	}
 	// -----------------------------------------------------
 	else

@@ -61,6 +61,8 @@ void STG_Init (void)
 	// Init X_DAE motor
 	x_dae_motor.name = x_dae_name;
 	x_dae_motor.slow_decel_at_limit = 0;
+	x_dae_motor.motor.max_travel = X_DAE_MAX_TRAVEL;
+	x_dae_motor.motor.home_status = STG_NOT_HOME;
 	x_dae_motor.motor.hw.flip_dir = X_DAE_HW_FLIP_DIR;
 	x_dae_motor.motor.hw.dir_port = X_DAE_HW_DIR_PORT;
 	x_dae_motor.motor.hw.dir_pin = X_DAE_HW_DIR_PIN;
@@ -77,6 +79,8 @@ void STG_Init (void)
 	// Init Y_DAE motor
 	y_dae_motor.name = y_dae_name;
 	y_dae_motor.slow_decel_at_limit = 0;
+	y_dae_motor.motor.max_travel = Y_DAE_MAX_TRAVEL;
+	y_dae_motor.motor.home_status = STG_NOT_HOME;
 	y_dae_motor.motor.hw.flip_dir = Y_DAE_HW_FLIP_DIR;
 	y_dae_motor.motor.hw.dir_port = Y_DAE_HW_DIR_PORT;
 	y_dae_motor.motor.hw.dir_pin = Y_DAE_HW_DIR_PIN;
@@ -93,6 +97,8 @@ void STG_Init (void)
 	// Init Z_DAE motor
 	z_dae_motor.name = z_dae_name;
 	z_dae_motor.slow_decel_at_limit = 0;
+	z_dae_motor.motor.max_travel = Z_DAE_MAX_TRAVEL;
+	z_dae_motor.motor.home_status = STG_NOT_HOME;
 	z_dae_motor.motor.hw.flip_dir = Z_DAE_HW_FLIP_DIR;
 	z_dae_motor.motor.hw.dir_port = Z_DAE_HW_DIR_PORT;
 	z_dae_motor.motor.hw.dir_pin = Z_DAE_HW_DIR_PIN;
@@ -284,8 +290,8 @@ void STG_softstop (T_MOTOR_CONTROL *ctl)
 		ctl->active->w_finish = 0; // when we are finished, the motor stands still (not sure if anyone uses this variable, though)
 
 		// If this decel cycle is done, it will swap once again. It is important that shutoff is now in it so that it does not randomly tick along.
-		ctl->waiting = &stepper_shutoff;
-		ctl->status = STG_PREPARED; // meaning that we prepared stepper_shutoff as waiting
+		ctl->waiting->shutoff = 1;
+		ctl->status = STG_PREPARED; // meaning that we prepared shutoff in the waiting struct.
 	}
 	// The motor is currently moving very slow or not at all -> just put in stop swap.
 	else

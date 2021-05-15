@@ -19,6 +19,8 @@
 #define		COMM_INITCHANNELSTODATA		0x07
 #define		COMM_GETCHANNELSREADY		0x08
 #define 	COMM_MOVECHANNELTO			0x09
+#define		COMM_MOVECHANNELRELATIVE	0x0A
+#define 	COMM_REFERENCECHANNEL		0x0B
 
 // Tags which SPV returns upon request
 #define		COMM_STAT_ID_TAG			0x00

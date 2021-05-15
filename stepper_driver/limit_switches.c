@@ -10,6 +10,10 @@
 #include "step_generation.h"
 
 
+// PROTOTYPES
+void check_stop(T_MOTOR_CONTROL *ctl);
+void check_referencing(T_MOTOR_CONTROL *ctl);
+
 /** @brief 	Callback for the X-DAE limit switch. If it is triggered
  * 			meaning the moving part is touching, this interrupt is
  * 			called. Only upon trigger, not upon release so far.
@@ -20,11 +24,8 @@
  */
 void LIM_x_dae_callback(void)
 {
-	if (x_dae_motor.slow_decel_at_limit == 0)
-		STG_hardstop(&x_dae_motor);
-	else
-		STG_softstop(&x_dae_motor);
-
+	check_stop(&x_dae_motor);
+	check_referencing(&x_dae_motor);
 }
 
 /** @brief 	Callback for the Y-DAE limit switch. If it is triggered
@@ -37,10 +38,8 @@ void LIM_x_dae_callback(void)
  */
 void LIM_y_dae_callback(void)
 {
-	if (y_dae_motor.slow_decel_at_limit == 0)
-		STG_hardstop(&y_dae_motor);
-	else
-		STG_softstop(&y_dae_motor);
+	check_stop(&y_dae_motor);
+	check_referencing(&y_dae_motor);
 }
 
 /** @brief 	Callback for the Z-DAE limit switch. If it is triggered
@@ -53,11 +52,34 @@ void LIM_y_dae_callback(void)
  */
 void LIM_z_dae_callback(void)
 {
-	if (z_dae_motor.slow_decel_at_limit == 0)
-		STG_hardstop(&z_dae_motor);
-	else
-		STG_softstop(&z_dae_motor);
+	check_stop(&z_dae_motor);
+	check_referencing(&z_dae_motor);
+}
 
+void check_stop(T_MOTOR_CONTROL *ctl)
+{
+	if (ctl->slow_decel_at_limit == 0)
+		STG_hardstop(ctl);
+	else
+		STG_softstop(ctl);
+}
+
+void check_referencing(T_MOTOR_CONTROL *ctl)
+{
+	if (ctl->motor.home_status == STG_WAITING_FIRST_CONTACT)
+	{
+		// First contact made -> retract for the second one
+		ctl->slow_decel_at_limit = 1;
+		ctl->motor.home_status = STG_AT_FIRST_CONTACT;
+
+	}
+	else if (ctl->motor.home_status == STG_WAITING_SECOND_CONTACT)
+	{
+		// Second contact made -> this is now the final motor position zero
+		ctl->slow_decel_at_limit = 0;
+		ctl->motor.home_status = STG_HOME;
+		ctl->motor.pos = 0;
+	}
 }
 
 
