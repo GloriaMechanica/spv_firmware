@@ -18,6 +18,7 @@
 #include "motor_control.h"
 #include "channels.h"
 #include <string.h>
+#include "notes.h"
 
 // Memory allocation for channel buffers
 T_DTP_NOTE e_note_buffer[CHA_E_NOTE_LENGTH];
@@ -324,10 +325,22 @@ void CHA_stopTime (void)
  */
 void CHA_updateChannels (void)
 {
+	if (CHA_getNumberDatapoint(&cha_e_note) > 0)
+	{
+		if(((T_DTP_NOTE*) CHA_peekFirstDatapoint(&cha_e_note))->timediff >=
+				CHA_getChannelTime() - cha_e_note.last_point_time)
+		{
+			T_DTP_NOTE point;
+			CHA_popDatapoints(&cha_e_note, &point, 1);
+			cha_e_note.last_point_time += point.timediff;
+			notes_e_set(point.note);
+
+		}
+	}
 	if (CHA_getNumberDatapoint(&cha_posx_dae) > 0)
 	{
-		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posx_dae))->timediff ==
-				CHA_getChannelTime() - cha_posx_dae.last_point_time)
+		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posx_dae))->timediff >=
+				CHA_getChannelTime() - cha_posx_dae.last_point_time) // Update of last_point_time happens in motor function
 		{
 			if (x_dae_motor.status == STG_IDLE)
 				SM_setMotorReady(&x_dae_motor);
@@ -336,7 +349,7 @@ void CHA_updateChannels (void)
 
 	if (CHA_getNumberDatapoint(&cha_posy_dae) > 0)
 	{
-		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posy_dae))->timediff ==
+		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_posy_dae))->timediff >=
 				CHA_getChannelTime() - cha_posy_dae.last_point_time)
 		{
 			if (y_dae_motor.status == STG_IDLE)
@@ -346,7 +359,7 @@ void CHA_updateChannels (void)
 
 	if (CHA_getNumberDatapoint(&cha_str_dae) > 0)
 	{
-		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_str_dae))->timediff ==
+		if(((T_DTP_MOTOR*) CHA_peekFirstDatapoint(&cha_str_dae))->timediff >=
 				CHA_getChannelTime() - cha_str_dae.last_point_time)
 		{
 			if (z_dae_motor.status == STG_IDLE)

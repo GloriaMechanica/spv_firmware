@@ -8,7 +8,7 @@
 #define NOTES_H_
 
 void notes_init(void);
-void notes_e_set(uint8_t note, uint8_t state);
+void notes_e_set(uint8_t note);
 
 
 #endif /* NOTES_H_ */

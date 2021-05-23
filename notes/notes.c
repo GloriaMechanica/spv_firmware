@@ -10,10 +10,10 @@
 #include "device_handles.h"
 #include "notes_mapping.h"
 
-#define NUMBER 1 // Number of magnet driver cards with 8 bit each
+#define NUMBER_DRIVER_CARDS 1 // Number of magnet driver cards with 8 bit each
 
-uint8_t notes_state[NUMBER]; // global variable for storing magnet data
-uint8_t notes_return[NUMBER]; // used for the returning SPI data. Not used for anything at the moment
+uint8_t notes_state[NUMBER_DRIVER_CARDS]; // global variable for storing magnet data
+uint8_t notes_return[NUMBER_DRIVER_CARDS]; // used for the returning SPI data. Not used for anything at the moment
 
 // PROTOTYPES
 static void notes_update(void);
@@ -27,7 +27,7 @@ static void notes_update(void);
 void notes_init(void)
 {
 	uint8_t i;
-	for(i=0; i<NUMBER; i++)
+	for(i=0; i<NUMBER_DRIVER_CARDS; i++)
 	{
 		notes_state[i] = 0x00;
 	}
@@ -36,26 +36,38 @@ void notes_init(void)
 /** @brief 	Sets the value of one specific note lever (up->0, down->1)
  * 			on the e-string.
  *
- *  @param (none)
+ *  @param note - note number starting with 0 at last
  *  @return (none)
  */
-void notes_e_set(uint8_t note, uint8_t state)
+void notes_e_set(uint8_t note)
 {
-	uint8_t board = e_boards[note];
-	uint8_t pin = e_pins[note];
+	dbgprintf("E string note set to %d", note);
+
+	uint8_t note_offset = 0xFF;
+	if (note >= E_STRING_EMPTY_MIDI_NOTE && note <= E_STRING_MAX_NOTE)
+	{
+		note_offset = note - E_STRING_EMPTY_MIDI_NOTE;
+	}
+	else
+		return;
+
+	uint8_t board = e_boards[note_offset];
+	uint8_t pin = e_pins[note_offset];
+
+	// ONLY FOR PROTOTYPE
+	notes_state[board] = 0x00;
+
 
 	// note has no corresponding magnet. Could be because not ready or because its an empty string
-	if (board == NOTE_UNPOPULATED || pin == NOTE_UNPOPULATED)
-		return;
-
-	// invalid data
-	if (board + 1 > NUMBER || pin > 7)
-		return;
-
-	if (state == 0)
-		notes_state[board] &= ~(1<<pin);
+	if (board == NOTE_UNPOPULATED || pin == NOTE_UNPOPULATED || (board + 1 > NUMBER_DRIVER_CARDS || pin > 7))
+	{
+		// TODO: error handling
+	}
 	else
+	{
 		notes_state[board] |= (1<<pin);
+	}
+
 	notes_update();
 }
 
@@ -67,7 +79,7 @@ void notes_e_set(uint8_t note, uint8_t state)
  */
 static void notes_update(void)
 {
-	HAL_SPI_TransmitReceive(&hspi1, notes_state, notes_return, NUMBER, 10);
+	HAL_SPI_TransmitReceive(&hspi1, notes_state, notes_return, NUMBER_DRIVER_CARDS, 10);
 	HAL_GPIO_WritePin(NOTE_LATCH_GPIO_Port, NOTE_LATCH_Pin, 1);
 	HAL_GPIO_WritePin(NOTE_LATCH_GPIO_Port, NOTE_LATCH_Pin, 0);
 }

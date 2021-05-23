@@ -11,7 +11,7 @@
 // General Z-axis-related parameters
 #define Z_STEPS_PER_REV		400			// For example 200 or 400 Steps per revolution
 #define Z_STEP_MODE			4			// 1 for full step, 2 for half step, 4 for quater step ...
-#define Z_ACCEL_MAX			(400.0F)		// maximal acceleration on this axis, [rad/sec^2]
+#define Z_ACCEL_MAX			(300.0F)		// maximal acceleration on this axis, [rad/sec^2]
 #define Z_SPEED_MAX			(50.0F)		// maximal speed on this axis [rad/sec]
 #define Z_ALPHA				((double) 2 * PI / (Z_STEPS_PER_REV * Z_STEP_MODE))	// This thing is used sometimes, easier that way
 
@@ -23,7 +23,7 @@
 #define XY_ALPHA				((double) 2 * PI / (XY_STEPS_PER_REV * XY_STEP_MODE))	// This thing is used sometimes, easier that way
 
 // Homing parameters
-#define RETRACTING_DISTANCE			50 		// Number of steps it retracts after first contact
+#define RETRACTING_DISTANCE			100 		// Number of steps it retracts after first contact
 #define SECOND_CONTACT_DISTANCE		-100	// Number of steps it moves towards limit switch again for second contact
 #define SECOND_CONTACT_SPEED		2		// speed it makes the second contact (in rad/s)
 

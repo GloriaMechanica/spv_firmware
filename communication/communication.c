@@ -15,9 +15,10 @@
 #include "debug_tools.h"
 #include "command_def.h"
 #include "settings.h"
+#include "notes.h"
 
 // PROTOTYPES
-unsigned short crc16(const unsigned char* data_p, unsigned char length);
+unsigned short crc16(const unsigned char* data_p, unsigned int length);
 
 /** @brief  Initializes communication stuff.
  *
@@ -221,7 +222,7 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 
 		if (channel_nr == CHA_E_NOTE_NR)
 		{
-			// TODO: Not implemented yet
+			notes_e_set(position);
 		}
 		else if (channel_nr == CHA_POSX_DAE_NR)
 		{
@@ -433,7 +434,7 @@ E_COM_PACKET_STATUS COM_sendResponse(uint8_t status, uint8_t *data, int32_t len)
  *  		length - length of buffer
  *  @return 16 bit CRC of given data field.
  */
-unsigned short crc16(const unsigned char* data_p, unsigned char length){
+unsigned short crc16(const unsigned char* data_p, unsigned int length){
     unsigned char x;
     unsigned short crc = 0xFFFF;
 
