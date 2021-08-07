@@ -16,6 +16,7 @@
 #include "command_def.h"
 #include "settings.h"
 #include "notes.h"
+#include "channels.h"
 
 // PROTOTYPES
 unsigned short crc16(const unsigned char* data_p, unsigned int length);
@@ -208,6 +209,29 @@ void COM_decodePackage(uint8_t *buf, int32_t len)
 	{
 		dbgprintf("Clear all channels");
 		CHA_Init();
+		COM_sendResponse(ACK, NULL, 0);
+	}
+	// -----------------------------------------------------
+	else if (command == COMM_INITCHANNELSTODATA)
+	{
+		dbgprintf("Init channels to current data points");
+		T_DTP_MOTOR *ptr;
+		if (CHA_getNumberDatapoint(&cha_posx_dae) > 0)
+		{
+			ptr = CHA_peekFirstDatapoint(&cha_posx_dae);
+			SM_moveMotorToLocation(&x_dae_motor, (int32_t) ptr->steps, XY_NOMSPEED);
+		}
+		if (CHA_getNumberDatapoint(&cha_posy_dae) > 0)
+		{
+			ptr = CHA_peekFirstDatapoint(&cha_posy_dae);
+			SM_moveMotorToLocation(&y_dae_motor, (int32_t) ptr->steps, XY_NOMSPEED);
+		}
+		if (CHA_getNumberDatapoint(&cha_str_dae) > 0)
+		{
+			ptr = CHA_peekFirstDatapoint(&cha_str_dae);
+			SM_moveMotorToLocation(&z_dae_motor, (int32_t) ptr->steps, Z_NOMSPEED);
+		}
+
 		COM_sendResponse(ACK, NULL, 0);
 	}
 	// -----------------------------------------------------

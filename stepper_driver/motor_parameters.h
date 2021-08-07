@@ -14,13 +14,15 @@
 #define Z_ACCEL_MAX			(300.0F)		// maximal acceleration on this axis, [rad/sec^2]
 #define Z_SPEED_MAX			(50.0F)		// maximal speed on this axis [rad/sec]
 #define Z_ALPHA				((double) 2 * PI / (Z_STEPS_PER_REV * Z_STEP_MODE))	// This thing is used sometimes, easier that way
+#define Z_NOMSPEED			(15.0F)		// Nominal travel speed for initializing axis etc.
 
 // General X/Y-axis-related parameters
 #define XY_STEPS_PER_REV		200			// For example 200 or 400 Steps per revolution
 #define XY_STEP_MODE			4			// 1 for full step, 2 for half step, 4 for quater step ...
-#define XY_ACCEL_MAX			(600.0F)	// maximal acceleration on this axis, [rad/sec^2]
+#define XY_ACCEL_MAX			(400.0F)	// maximal acceleration on this axis, [rad/sec^2]
 #define XY_SPEED_MAX			(50.0F)		// maximal speed on this axis [rad/sec]
 #define XY_ALPHA				((double) 2 * PI / (XY_STEPS_PER_REV * XY_STEP_MODE))	// This thing is used sometimes, easier that way
+#define XY_NOMSPEED				(15.0F)		// Nominal travel speed for initializing axis etc.
 
 // Homing parameters
 #define RETRACTING_DISTANCE			100 		// Number of steps it retracts after first contact

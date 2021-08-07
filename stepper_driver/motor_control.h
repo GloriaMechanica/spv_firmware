@@ -15,6 +15,7 @@
 
 #include "channels.h"
 #include "step_generation.h"
+#include "motor_parameters.h"
 
 typedef struct
 {
