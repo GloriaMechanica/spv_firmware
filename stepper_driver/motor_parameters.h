@@ -26,7 +26,7 @@
 
 // Homing parameters
 #define RETRACTING_DISTANCE			100 		// Number of steps it retracts after first contact
-#define SECOND_CONTACT_DISTANCE		-100	// Number of steps it moves towards limit switch again for second contact
+#define SECOND_CONTACT_DISTANCE		-120	// Number of steps it moves towards limit switch again for second contact
 #define SECOND_CONTACT_SPEED		2		// speed it makes the second contact (in rad/s)
 
 // -------- DAE apparatus -------------------------
