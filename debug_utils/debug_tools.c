@@ -45,7 +45,7 @@ uint32_t 	debug_motor_tracking_drop_counter; 					// Counts how many timer value
  */
 void dbgprintf(const char *fmt, ...)
 {
-	return;
+
 	char buf[DEBUG_UART_TX_BUFFER_SIZE];
 
 	// Get additional arguments and pass over to sprintf
