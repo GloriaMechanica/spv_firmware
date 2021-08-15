@@ -61,7 +61,7 @@ void SM_Init (void)
 }
 
 /*
- * Just for debugging
+ * Just for debugging, not used for playing M-code
  */
 void SM_restart_testcylce (void)
 {
